@@ -97,6 +97,28 @@ provable answer. See `docs/automation/auditing.md` Level 4.
 
 ---
 
+---
+
+## 0008: Annotations are local input files; the sheet is a pure output
+
+**Decision:** The "why" behind each expense (what the tax pro needs for
+write-offs) is captured in `annotations/<year>.csv` files the pipeline
+generates and the human fills in — NOT typed directly into the Google Sheet.
+
+**Why:** Human judgment is a first-class *input* and must live in files we
+own: durable, re-runnable, and safe from any sheet rebuild. The Google Sheet
+becomes a *view* of (transactions + annotations), never the place work
+happens. Each annotation row carries the transaction's fingerprint, so
+re-running `annotate` re-associates human work with the right transaction
+even after re-parsing or re-sorting — and never overwrites a filled row.
+This also defers the Sheets writer until the sheet's final shape
+(transactions + annotations merged) is known, so we build it once.
+
+**Consequence:** `annotations/` is gitignored like `records/` and `output/` —
+it contains financial judgments about real transactions.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and

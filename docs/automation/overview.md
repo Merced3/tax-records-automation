@@ -45,7 +45,11 @@ tax-pro preferences change; the pipeline shape shouldn't have to.
 - Cash App statements: **working** (17/17 parsed cleanly; zero-transaction
   months correctly produce zero rows).
 - All 145 statement PDFs currently parse — zero unclaimed, zero errors.
-- Google Sheets writer: not started (by design, see decision 0001).
+- Reconciliation audit (Level 4) proves extraction per year.
+- Annotation workflow: `annotate` generates per-year files you fill in
+  (Category/Note); re-running preserves your work. See decision 0008.
+- Google Sheets writer: not started — deferred until annotations define the
+  sheet's final shape (decision 0008), so it's built once.
 
 ## Where to go next
 

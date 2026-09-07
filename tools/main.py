@@ -15,6 +15,10 @@ Usage (from the repo root, with the venv active):
     python tools/main.py audit 2024
         Prove the extraction for one year: reconcile parsed transactions
         against the balances the statements themselves print.
+
+    python tools/main.py annotate 2024
+        Generate annotations/<year>.csv for you to fill in (Category, Note).
+        Preserves rows you've already annotated. Re-runnable.
 """
 
 import os
@@ -29,6 +33,7 @@ from pipeline.engine import run_year
 from writers.csv_writer import write_year_csv
 from parsers import PLUGINS
 from audit import reconcile
+from annotations import store
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -126,6 +131,22 @@ def cmd_audit(year, config):
         sys.exit(1)
 
 
+def cmd_annotate(year, config):
+    records = os.path.join(REPO_ROOT, config["records_root"])
+    txns, report = run_year(records, year)
+    txns = filters.apply(txns, config["include"])
+
+    out_dir = os.path.join(REPO_ROOT, "annotations")
+    path = os.path.join(out_dir, f"{year}.csv")
+    total, annotated, carried = store.generate(txns, path)
+
+    print(f"{year}: wrote {os.path.relpath(path, REPO_ROOT)}")
+    print(f"  transactions:      {total}")
+    print(f"  already annotated: {annotated} ({carried} carried over from prior file)")
+    print(f"  to annotate:       {total - annotated}")
+    print(f"\nFill in the Category and Note columns, then re-run anytime.")
+
+
 def cmd_run(config):
     for year in config["years"]:
         txns, report = run_year(os.path.join(REPO_ROOT, config["records_root"]), year)
@@ -148,6 +169,8 @@ if __name__ == "__main__":
         cmd_verify_year(int(sys.argv[2]), config)
     elif cmd == "audit" and len(sys.argv) == 3:
         cmd_audit(int(sys.argv[2]), config)
+    elif cmd == "annotate" and len(sys.argv) == 3:
+        cmd_annotate(int(sys.argv[2]), config)
     elif cmd == "run":
         cmd_run(config)
     else:

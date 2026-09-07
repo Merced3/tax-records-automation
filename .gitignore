@@ -1,4 +1,5 @@
 .venv/
 records/
 output/
+annotations/
 __pycache__/

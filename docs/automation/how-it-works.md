@@ -37,6 +37,19 @@ The plain-language story of what happens when you run the pipeline.
 6. **Writing.** The CSV writer produces `output/<year>.csv` with exactly the
    columns config asks for, in the order config asks for them.
 
+## The annotation loop (where the human fits in)
+
+Extraction is automatic; understanding is not. After `run` produces clean
+CSVs, `annotate <year>` generates `annotations/<year>.csv`: every
+transaction with two empty columns — **Category** (Meals, Fuel, Supplies,
+Personal...) and **Note** ("client dinner"). You fill these in (Excel,
+Google Sheets, any editor). The fingerprint column silently links your words
+to the exact transaction, so re-running `annotate` after a re-parse keeps
+everything you've written and only appends genuinely new transactions.
+
+This is the human-in-the-loop seam: the machine handles volume, you handle
+judgment, and neither can destroy the other's work.
+
 ## Why the seams are where they are
 
 - **Parsers are plugins** because banks change. Switching banks someday
