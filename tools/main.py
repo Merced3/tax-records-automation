@@ -2,6 +2,10 @@
 
 Usage (from the repo root, with the venv active):
 
+  Invoke as:  python tools/main.py <command> ...
+  (NOT:  tools/main.py ...  — Windows can't run the .py as a bare command
+   and will silently do nothing.)
+
     python tools/main.py verify 2023 "Everyday Spend Bank Account/Apr-10.pdf"
         Read ONE statement, print what we extracted + the report.
         Writes nothing. Use this to eyeball a parser before trusting it.

@@ -30,6 +30,11 @@ From the repo root:
 .venv/Scripts/python tools/main.py run
 ```
 
+**Important:** always invoke via `python tools/main.py ...` (or
+`.venv/Scripts/python tools/main.py ...`). Do NOT run `tools/main.py ...`
+directly — Windows can't execute the `.py` as a bare command, and it will
+silently do nothing (which looks like it worked but produced no output).
+
 (On Windows, `PYTHONIOENCODING=utf-8` before the command avoids console
 encoding errors from special characters in statement text.)
 
