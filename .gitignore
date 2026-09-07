@@ -1,5 +1,6 @@
 .venv/
 records/
 output/
-annotations/
+# the data folder at repo root, NOT the tools/annotations code package
+/annotations/
 __pycache__/
