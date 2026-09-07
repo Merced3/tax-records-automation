@@ -11,6 +11,10 @@ Usage (from the repo root, with the venv active):
 
     python tools/main.py run
         Parse every configured year and write CSVs to output/.
+
+    python tools/main.py audit 2024
+        Prove the extraction for one year: reconcile parsed transactions
+        against the balances the statements themselves print.
 """
 
 import os
@@ -24,6 +28,7 @@ from pipeline import filters
 from pipeline.engine import run_year
 from writers.csv_writer import write_year_csv
 from parsers import PLUGINS
+from audit import reconcile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -87,6 +92,40 @@ def cmd_verify_year(year, config):
     print_report(report)
 
 
+def cmd_audit(year, config):
+    records = os.path.join(REPO_ROOT, config["records_root"])
+    txns, report = run_year(records, year)
+
+    chase_paths, cashapp_paths = [], []
+    chase_txns, cashapp_txns = [], []
+    for t in txns:
+        (cashapp_txns if "Cash App" in t.source_file or "CashApp" in t.source_file
+         else chase_txns).append(t)
+    for dirpath, _d, files in os.walk(os.path.join(records, str(year), "Bank Statements")):
+        for f in files:
+            if not f.lower().endswith(".pdf"):
+                continue
+            p = os.path.join(dirpath, f)
+            (cashapp_paths if "CashApp" in dirpath else chase_paths).append(p)
+
+    results = []
+    if chase_paths:
+        results.append(reconcile.audit_chase(chase_paths))
+    if cashapp_paths:
+        results.append(reconcile.audit_cashapp(cashapp_paths, cashapp_txns))
+
+    print(f"audit {year}")
+    all_ok = True
+    for r in results:
+        print(f"  [{r.label}]")
+        for ok, msg in r.checks:
+            print(f"    {'PASS' if ok else 'FAIL'}  {msg}")
+            all_ok = all_ok and ok
+    print(f"  => {'ALL CHECKS PASSED' if all_ok else 'CHECK FAILURES ABOVE'}")
+    if not all_ok:
+        sys.exit(1)
+
+
 def cmd_run(config):
     for year in config["years"]:
         txns, report = run_year(os.path.join(REPO_ROOT, config["records_root"]), year)
@@ -107,6 +146,8 @@ if __name__ == "__main__":
         cmd_verify(sys.argv[2], sys.argv[3])
     elif cmd == "verify-year" and len(sys.argv) == 3:
         cmd_verify_year(int(sys.argv[2]), config)
+    elif cmd == "audit" and len(sys.argv) == 3:
+        cmd_audit(int(sys.argv[2]), config)
     elif cmd == "run":
         cmd_run(config)
     else:

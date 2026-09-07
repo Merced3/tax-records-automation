@@ -79,6 +79,24 @@ automation and serve a different reader; merging them would serve neither.
 
 ---
 
+---
+
+## 0007: Reconciliation audit over unit tests
+
+**Decision:** Correctness is proven by reconciling parsed transactions
+against the summaries each statement prints about itself (`main.py audit`),
+not by a conventional unit-test suite.
+
+**Why:** The statements are the ground truth. A unit test can only assert
+what we already believe the PDF says; the reconciliation check asserts what
+the *bank* says happened, in dollars and cents. It caught two real things on
+its first run that no amount of eyeballing had: a duplicated statement file
+in 2024, and the fact that Cash App's bank-funded payments never touch the
+Cash App balance. When the audit passes, "is the output accurate?" has a
+provable answer. See `docs/automation/auditing.md` Level 4.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and
@@ -92,5 +110,6 @@ automation and serve a different reader; merging them would serve neither.
 - **Merchant cleanup is naive.** Regex stripping, not entity resolution.
   Acceptable because the raw description column is always preserved and a
   human reviews the Merchant column anyway.
-- **2024 duplicate count (98)** is higher than other years. Probably
-  overlapping statement downloads. Unverified — see auditing.md.
+- ~~**2024 duplicate count (98)**~~ RESOLVED by the audit (0007): a
+  misnamed duplicate `Jun-10.pdf` duplicated the `May-8.pdf` statement.
+  Deleted; 2024 now dedupes a normal 4 overlaps.

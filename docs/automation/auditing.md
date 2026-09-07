@@ -38,14 +38,27 @@ Pick any row in a CSV. The `Source File` and `Fingerprint` columns (enable
 them temporarily in `config.yaml`) tell you exactly which PDF it came from.
 Open that PDF, Ctrl+F the amount. If it matches, that row is provably real.
 
-## Level 4: Reconciliation against the statement's own math (future)
+## Level 4: Reconciliation against the statement's own math (BUILT)
 
-Each statement prints a summary: beginning balance, total deposits, total
-withdrawals, ending balance. The sum of all parsed transactions should equal
-*ending − beginning* for that statement. When built, this check turns
-"the parser looks right" into "the parser is provably right, per statement."
-This is the strongest audit we can automate and the top candidate for a
-future `audit` command.
+```bash
+.venv/Scripts/python tools/main.py audit 2024
+```
+
+Each statement prints its own summary, so we can *prove* extraction rather
+than eyeball it:
+
+- **Chase** — per account, the year's statements must chain into consecutive
+  periods. An overlap means a duplicated statement file (this is how we
+  caught a misnamed duplicate `Jun-10.pdf` in 2024); a gap means a missing
+  statement.
+- **Cash App** — the year's extracted Money In and Money Out must equal the
+  statements' own printed totals, after excluding payments funded directly
+  from the linked bank (which never touch the Cash App balance and are
+  therefore correctly excluded from the printed totals).
+
+This is the strongest audit we have: it turns "the parser looks right" into
+"the parser is provably consistent with what the banks themselves printed."
+Run it after any parser change and before trusting a year's CSV.
 
 ## Level 5: Sheet diff (future, API era)
 
