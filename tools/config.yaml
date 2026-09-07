@@ -1,0 +1,24 @@
+# Configuration for the statement pipeline.
+# Everything custom or likely-to-change lives here, NOT in the code.
+
+# Where the bank statement PDFs live (relative to repo root).
+records_root: records
+
+# Which year folders to process.
+years: [2022, 2023, 2024, 2025]
+
+# Where generated CSVs are written (gitignored).
+output_dir: output
+
+# Columns written to the CSV, in order.
+# Must match names the writers know about (see writers/csv_writer.py).
+columns:
+  - Amount
+  - Date
+  - Merchant
+  - Bank Description
+
+# What to include in output.
+#   all       -> every transaction (default: we don't know what the tax pro doesn't want)
+#   expenses  -> only money out (negative amounts)
+include: all
