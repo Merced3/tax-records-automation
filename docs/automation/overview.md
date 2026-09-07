@@ -42,10 +42,10 @@ tax-pro preferences change; the pipeline shape shouldn't have to.
 ## Current status
 
 - Chase checking/savings statements: **working** (128/128 parsed cleanly).
-- Cash App statements: **stub only** — the engine reports them as
-  "unclaimed" rather than silently skipping. See
-  [decisions](decisions.md) and `tools/parsers/cashapp.py`.
-- Google Sheets writer: not started (by design).
+- Cash App statements: **working** (17/17 parsed cleanly; zero-transaction
+  months correctly produce zero rows).
+- All 145 statement PDFs currently parse — zero unclaimed, zero errors.
+- Google Sheets writer: not started (by design, see decision 0001).
 
 ## Where to go next
 

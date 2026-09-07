@@ -7,9 +7,9 @@ wrong, how do I check?"* — ordered from "free, already built" to "future work"
 
 Every `run` / `verify-year` prints a report. Healthy signs:
 
-- **unclaimed PDFs: 0** (or only Cash App files, until that parser exists).
-  Anything else unclaimed means a statement format changed and its data is
-  *missing from the CSV* — this is the most important number in the report.
+- **unclaimed PDFs: 0.** Any unclaimed file means a statement format
+  changed (or a new bank appeared) and its data is *missing from the CSV* —
+  this is the most important number in the report.
 - **errors: 0.** An error means a parser choked on a file it claimed.
 - **duplicates removed: small.** Overlapping statements make some duplicates
   normal (2022: 3, 2023: 8). A big number (2024: 98) isn't proof of a

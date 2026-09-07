@@ -86,6 +86,9 @@ automation and serve a different reader; merging them would serve neither.
   handful of early-January transactions. Proper fix: parse the statement
   period header ("March 09, 2023 through April 10, 2023") and infer each
   transaction's year from it. Deliberately deferred — baby steps.
+- **2026 is excluded from config for now.** Its Cash App folder is empty
+  (no statements yet). Add `2026` to `years:` in `tools/config.yaml` when
+  statements exist.
 - **Merchant cleanup is naive.** Regex stripping, not entity resolution.
   Acceptable because the raw description column is always preserved and a
   human reviews the Merchant column anyway.

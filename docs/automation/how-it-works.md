@@ -60,8 +60,6 @@ The plain-language story of what happens when you run the pipeline.
   folder's year.** A statement period that straddles New Year (e.g.
   Dec 30–Jan 9) would mislabel a few days. Fix is planned; it's in
   decisions.md as a known debt item.
-- **Cash App statements are not parsed yet** (stub parser). They are
-  reported, not skipped.
 - **The 2024 run removed 98 duplicates** — more than other years. Likely
   overlapping statements downloaded twice, but it deserves a human glance
   (see auditing.md, spot-check).
