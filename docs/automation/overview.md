@@ -1,61 +1,67 @@
-# Overview — read this first
+# Automation overview
 
-## The problem
+## Thesis
 
-Tax years 2022–2025 need to be reconstructed for filing. The raw evidence is
-a folder of bank statement PDFs (~145 of them, Chase and Cash App, 2022–2025).
-Getting every transaction into a spreadsheet by hand takes forever and is
-error-prone.
+The official statement is evidence. Parsed transactions are a reconstruction.
+Human explanations are decisions. Exports are disposable views.
 
-## What this system does
+The project keeps those four things separate so an automation can be rerun
+without destroying the only irreplaceable work: the source records and the
+human's judgment.
 
-It reads the bank statement PDFs, extracts every transaction (date, amount,
-description), removes duplicates, and writes **one CSV per year** into
-`output/`. Those CSVs match the exact 4-column format my tax professional
-asked for (`Amount, Date, Merchant, Bank Description`), so they can be pasted
-straight into the Google Sheet `Merced-Bank-Statement-Organization`
-(one tab per year).
+## The pipeline
 
-## Why CSVs instead of writing to Google Sheets directly?
+```text
+records (official evidence)
+  -> ingestion plugins (Chase PDF, Cash App PDF)
+  -> independent audit checks
+  -> canonical transactions with unique IDs and source locations
+  -> annotations (suggestions separate from human decisions)
+  -> output/raw + output/tax-professional-draft + manifests
+  -> output/final only after every row is human-reviewed
+  -> Google Sheets later, initially read-only/diff-only
+```
 
-Two reasons:
+## Current guarantees
 
-1. **Trust before automation.** A CSV can be opened and eyeballed before
-   anything touches the real spreadsheet. The spreadsheet contains
-   hand-annotated work we must never clobber.
-2. **The CSV is not a detour.** When we later add a Google Sheets "writer",
-   it will consume the exact same data the CSV writer consumes. The Sheets
-   API can submit a whole table in one request, so the future API mode is a
-   small addition — not a rewrite. This is recorded as
-   [decision 0001](decisions.md#0001-csv-first-sheets-api-later).
+- Every discovered file is parsed, explicitly ignored with a reason, or
+  reported as an error. Venmo CSVs are currently explicit ignores.
+- Every Chase statement reconciles to its printed balance change, every row
+  follows the running-balance chain, and every date lies in its statement.
+- Cash App reconciles per month, not merely at year level.
+- Lookalike transactions have separate stable transaction IDs. A content
+  fingerprint is retained only for comparison/deduplication.
+- Annotation rewrites create a snapshot, write a temporary file, validate it,
+  and atomically replace the current file.
+- Rule suggestions live in separate columns. Rules can change without
+  overwriting Category, Tax Treatment, or Note.
+- Generated output includes a raw CSV and a manifest containing source hashes,
+  parser identities, audit results, row count, Git commit, and output hashes.
 
-## The design philosophy in one paragraph
+## What is not claimed
 
-The system is a pipeline with three seams: **parsers** (how we read a
-specific bank's PDF), the **engine** (bank-agnostic machinery that finds
-PDFs, routes them to the right parser, dedupes, sorts), and **writers**
-(where results go). Every choice that might change — which years, which
-columns, whether to include income or only expenses — lives in
-`tools/config.yaml`, not in code. The bet: banks change, spreadsheets change,
-tax-pro preferences change; the pipeline shape shouldn't have to.
+- Merchant cleanup is a convenience, not proof.
+- A merchant category does not establish tax deductibility.
+- A PDF parser plus a reconciliation audit is strong evidence of completeness,
+  but the official PDF remains authoritative.
+- The fourth professional column is currently configured as the human `Note`.
+  Confirm that mapping with the tax professional before final export.
 
-## Current status
+## Reading order for a fresh session
 
-- Chase checking/savings statements: **working** (128/128 parsed cleanly).
-- Cash App statements: **working** (17/17 parsed cleanly; zero-transaction
-  months correctly produce zero rows).
-- All 145 statement PDFs currently parse — zero unclaimed, zero errors.
-- Reconciliation audit (Level 4) proves extraction per year.
-- Annotation workflow: `annotate` generates per-year files you fill in
-  (Category/Note); re-running preserves your work. See decision 0008.
-- Rules auto-fill: `tools/rules.yaml` auto-labels obvious merchants
-  (Chick-Fil-A→Meals); suggests only, never overwrites you. Decision 0011.
-- Google Sheets writer: not started — deferred until annotations define the
-  sheet's final shape (decision 0008), so it's built once.
+1. This overview
+2. `how-it-works.md` — data flow and ownership
+3. `auditing.md` — what is and is not proven
+4. `rules.md` — year-aware suggestions versus human decisions
+5. `recovery.md` — snapshots, journal, atomic writes, network failures
+6. `testing.md` — why each regression exists
+7. `decisions.md` — current architectural commitments
+8. `future.md` — Sheets, Plaid-style sources, and interfaces
+9. `setup.md` — commands
 
-## Where to go next
+## Next boundaries
 
-- `how-it-works.md` — the pipeline story in plain language
-- `decisions.md` — every "we chose X over Y" and why
-- `auditing.md` — how to convince yourself the output is correct
-- `setup.md` — how to actually run the thing
+Bank APIs, Discord, and Google Sheets must reuse the core pipeline rather than
+owning financial logic. A network source downloads to staging, validates and
+hashes content, then commits locally; a connection failure never replaces good
+local state. A UI proposes or records decisions through transaction IDs.

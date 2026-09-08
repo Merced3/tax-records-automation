@@ -1,0 +1,23 @@
+# Copy this file to config/rules.yaml. The real file is private/gitignored.
+# Rules suggest merchant classification; they do not decide deductibility.
+rules:
+  - id: merchant.example-fuel
+    version: 1
+    match:
+      contains: Example Fuel Station
+    applies:
+      years: [2024]
+      institutions: [Chase]
+    suggest:
+      category: Fuel
+      note: ""
+
+  - id: merchant.example-software
+    version: 1
+    match:
+      contains: Example Software
+    applies:
+      years: [2023, 2024]
+    suggest:
+      category: Software
+      note: Needs business-purpose review

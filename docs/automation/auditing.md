@@ -1,84 +1,59 @@
-# Auditing — how to trust the output
+# Auditing and evidence
 
-The question this document answers: *"If I'm suspicious that the output is
-wrong, how do I check?"* — ordered from "free, already built" to "future work".
+## What the audit is testing
 
-## Level 0: Read the run report (built, free)
+Treat ingestion as a black box: the parser claims it found transactions; the
+audit compares that claim with information printed elsewhere in the official
+statement. Tests protect known implementation failures; audits challenge real
+private records. Both are necessary.
 
-Every `run` / `verify-year` prints a report. Healthy signs:
+## Chase checks
 
-- **unclaimed PDFs: 0.** Any unclaimed file means a statement format
-  changed (or a new bank appeared) and its data is *missing from the CSV* —
-  this is the most important number in the report.
-- **errors: 0.** An error means a parser choked on a file it claimed.
-- **duplicates removed: small.** Overlapping statements make some duplicates
-  normal (2022: 3, 2023: 8). A big number (2024: 98) isn't proof of a
-  problem — but it's a prompt to spot-check.
+For every statement/account:
 
-## Level 1: Eyeball one statement (built, free)
+1. Statement periods are ordered and do not overlap unexpectedly.
+2. Sum of parsed transactions equals ending balance minus beginning balance.
+3. Every transaction date lies inside the printed statement period.
+4. Every running balance equals the prior balance plus that row's amount.
+5. Empty parses are accepted only when the printed balance change is zero.
 
-```bash
-.venv/Scripts/python tools/main.py verify 2023 "Chase/Everyday Spend Bank Account/Apr-10.pdf"
-```
+The running-balance check is per-row and catches omissions, merges, splits, or
+reordering that a year total could hide.
 
-Prints every transaction extracted from that single PDF, writes nothing.
-Open the actual PDF side by side and compare a page. Five minutes buys real
-confidence. This is the right move after any parser code change.
+## Cash App checks
 
-## Level 2: Coverage check (built, manual)
+Each month is checked independently:
 
-A year should have ~12 statements per account. `verify-year` tells you how
-many statements parsed; the records folder tells you how many exist. If
-2024 shows 36 parsed + 5 unclaimed = 41 PDFs and the folder holds 41, nothing
-was skipped.
+1. Parsed Money In equals the month's printed Money In.
+2. Parsed Money Out equals the month's printed Money Out after separating
+   payments funded directly by a linked bank.
+3. Every transaction date lies inside that statement month.
+4. An absent Money In/Out summary is accepted as empty only when the printed
+   monthly change is zero.
 
-## Level 3: Spot-check a random row (built, manual)
+Monthly checks prevent one month's error from cancelling another month's error.
 
-Pick any row in a CSV. The `Source File` and `Fingerprint` columns (enable
-them temporarily in `config.yaml`) tell you exactly which PDF it came from.
-Open that PDF, Ctrl+F the amount. If it matches, that row is provably real.
+## Source accounting
 
-## Level 4: Reconciliation against the statement's own math (BUILT)
+The audit reports parsed statements, unclaimed PDFs, ingestion errors, and every
+ignored non-PDF file. Ignored is a declared policy state, not invisibility.
 
-```bash
-.venv/Scripts/python tools/main.py audit 2024
-```
+## Raw proof package
 
-Each statement prints its own summary, so we can *prove* extraction rather
-than eyeball it:
+`python run.py build <year>` writes:
 
-- **Chase** — five proofs. (1) Per account, statements chain into
-  consecutive periods (catches duplicate/missing statement files).
-  (2) **Each statement's parsed sum equals its printed balance delta, to
-  the cent** (catches dropped/fused transactions — decision 0009).
-  (3) **Every transaction date falls inside its statement's period**
-  (catches right-amount-wrong-date rows).
-  (4) **The running-balance chain is internally consistent** — each row's
-  printed balance equals the previous balance plus its amount (catches
-  merged, split, or reordered rows; the strongest per-row proof we have).
-  (5) Transaction years come from the statement period, so Dec→Jan
-  statements stamp December rows with the prior year (decision 0012).
-- **Cash App** — the year's extracted Money In and Money Out must equal the
-  statements' own printed totals, after excluding payments funded directly
-  from the linked bank (which never touch the Cash App balance and are
-  therefore correctly excluded from the printed totals).
+- source-level raw CSV with account, statement, balance/fee, and source location
+- four-column tax-professional draft
+- manifest with source SHA-256 hashes, parser names, statement IDs, transaction
+  counts, ignored files, audit details, output hashes, and Git commit
 
-This is the strongest audit we have: it turns "the parser looks right" into
-"the parser is provably consistent with what the banks themselves printed."
-Run it after any parser change and before trusting a year's CSV.
+The manifest shows exactly which evidence and code produced an export. The PDF
+remains authoritative; the package makes the derivation reproducible.
 
-## Level 5: Sheet diff (future, API era)
+## Limits
 
-Before the Google Sheets writer ever writes, it will fingerprint what's
-already in the tab and show the diff — rows to add, rows already present.
-Hand-annotated rows are never touched. Re-running becomes safe by
-construction (idempotent), and "what are we missing?" is computed, not
-eyeballed.
-
-## What to do when an audit finds a problem
-
-1. Don't patch the CSV by hand — the fix belongs in the parser or it will
-   regress silently next run.
-2. Add the offending statement as a `verify` case so the bug stays visible
-   until fixed.
-3. Note it in `decisions.md` if the fix changes a design assumption.
+The parser and audit both rely on PDF text extraction, so they are not fully
+independent of the PDF library. The independent summary/running-balance
+relationships substantially reduce that risk. Synthetic regression tests cover
+every PDF failure found so far. Merchant naming and tax meaning remain human
+judgments.

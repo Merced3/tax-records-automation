@@ -1,78 +1,66 @@
 # How it works
 
-The plain-language story of what happens when you run the pipeline.
+## 1. Discovery accounts for every file
 
-## The cast
+The pipeline scans `records/<year>/Bank Statements/`. PDFs are offered to
+registered ingestion plugins. Other files are not invisible: they appear as
+explicit ignores with a reason. Today, Venmo CSV files are reported as a
+structured source that is not enabled yet.
 
-| Piece | File | Its job |
-|---|---|---|
-| Entry point | `tools/main.py` | The only thing you run. Three commands: `verify`, `verify-year`, `run`. |
-| Config | `tools/config.yaml` | Every knob: which years, which columns, include-all vs expenses-only. |
-| Engine | `tools/pipeline/engine.py` | Finds PDFs, asks parsers to claim them, dedupes, sorts. Knows no bank specifics. |
-| Transaction | `tools/pipeline/models.py` | The one record type everything speaks. Carries its own fingerprint + origin. |
-| Parsers | `tools/parsers/*.py` | One file per bank/format. The only place bank-specific knowledge lives. |
-| Writers | `tools/writers/*.py` | Turn transactions into output. CSV today, Google Sheets later. |
+## 2. Plugins produce one canonical shape
 
-## The story of one `run`
+Each bank-specific plugin returns a statement period and transactions. Every
+transaction includes:
 
-1. **Discovery.** For each configured year, the engine walks
-   `records/<year>/Bank Statements/` and collects every PDF.
-2. **Claiming.** For each PDF, the engine reads the first page's text and
-   asks each registered parser, in order: "is this yours?" The Chase parser
-   claims anything containing "JPMorgan Chase Bank". If *no* parser claims
-   a file, it is listed in the report as **unclaimed** — never silently
-   skipped. (This is how we know the 17 Cash App PDFs are still waiting.)
-3. **Parsing.** The claiming parser extracts transactions: date, signed
-   amount (negative = money out), a best-effort merchant name, and the raw
-   bank description. Each transaction also remembers which PDF and which
-   account folder it came from.
-4. **Fingerprinting & dedupe.** Every transaction gets a fingerprint from
-   its date + amount + description + account. Some statements overlap
-   (e.g. `Apr-10.pdf` and `Apr.pdf` cover the same days), so duplicates are
-   expected; the engine keeps the first copy and counts the rest. The count
-   is in the report — dedupe is transparent, not a black box.
-5. **Filtering.** The `include` setting in config decides what survives:
-   `all` (default — we don't presume to know what the tax pro doesn't want)
-   or `expenses` (money out only).
-6. **Writing.** The CSV writer produces `output/<year>.csv` with exactly the
-   columns config asks for, in the order config asks for them.
+- unique Transaction ID
+- lookalike/content fingerprint
+- institution and account
+- stable statement identity
+- date, amount, raw bank description, cleaned merchant
+- running balance or fee when available
+- source file, page, and extracted line
 
-## The annotation loop (where the human fits in)
+The Transaction ID includes statement identity, source values, running balance
+where available, and an occurrence number. Two identical-looking charges can
+therefore remain two independently annotatable rows.
 
-Extraction is automatic; understanding is not. After `run` produces clean
-CSVs, `annotate <year>` generates `annotations/<year>.csv`: every
-transaction with two empty columns — **Category** (Meals, Fuel, Supplies,
-Personal...) and **Note** ("client dinner"). You fill these in (Excel,
-Google Sheets, any editor). The fingerprint column silently links your words
-to the exact transaction, so re-running `annotate` after a re-parse keeps
-everything you've written and only appends genuinely new transactions.
+## 3. The audit challenges the parser
 
-This is the human-in-the-loop seam: the machine handles volume, you handle
-judgment, and neither can destroy the other's work.
+The audit reads statement summaries independently and compares them with parser
+results. Output is refused when an audit fails.
 
-## Why the seams are where they are
+Chase checks sequence, statement totals, every date, every running-balance step,
+and genuinely empty statements. Cash App checks each monthly statement's Money
+In/Out and dates, accounting separately for bank-funded payments.
 
-- **Parsers are plugins** because banks change. Switching banks someday
-  means writing one new file in `parsers/`; the engine, config, and writers
-  don't change.
-- **Columns are config** because the spreadsheet format belongs to the tax
-  professional. Today it's 4 columns; if that ever changes, it's a config
-  edit. The writers already *can* emit more (Account, Source File,
-  Fingerprint) — they're just off by default.
-- **The transaction carries provenance** (source file, account, fingerprint)
-  so that future auditing features never need to re-read a PDF to answer
-  "where did this row come from?"
+## 4. Suggestions and decisions are different
 
-## Known limitations (honest list)
+`config/rules.yaml` creates `Suggested Category` and `Suggested Note`. It never
+writes Category, Tax Treatment, or Note. Those three columns are human-owned.
+Changing a rule updates suggestions while preserving human decisions.
 
-- **Merchant names are best-effort.** Banks mangle merchant names into
-  noise; we strip the obvious junk ("Card Purchase", trailing card digits)
-  but the result still needs human review. The `Bank Description` column
-  always keeps the full raw text, so nothing is lost.
-- **Transaction dates are MM/DD on the statement; we stamp them with the
-  folder's year.** A statement period that straddles New Year (e.g.
-  Dec 30–Jan 9) would mislabel a few days. Fix is planned; it's in
-  decisions.md as a known debt item.
-- **The 2024 run removed 98 duplicates** — more than other years. Likely
-  overlapping statements downloaded twice, but it deserves a human glance
-  (see auditing.md, spot-check).
+Rules have an ID, version, optional applicable years/institutions/accounts, a
+match, and a suggestion. This makes rules explainable and year-aware.
+
+## 5. Annotation writes are transactional
+
+Before rewriting an existing annotation CSV, the program snapshots it under
+`backups/`. It writes the replacement beside the original, flushes it to disk,
+reads it back to validate the header and row count, then uses an atomic replace.
+If a human-annotated legacy row cannot be matched, the operation stops and the
+current file remains intact.
+
+A private baseline lets the next run detect Category/Tax Treatment/Note edits
+made in Excel or VS Code and append those changes to `backups/journal.jsonl`.
+
+## 6. Output has layers
+
+- `output/raw/<year>.csv`: all available source-level fields and provenance.
+- `output/tax-professional-draft/<year>.csv`: exactly four configured columns.
+- `output/final/<year>.csv`: refused until all rows are human-reviewed and the
+  audit passes.
+- A manifest beside each professional output hashes both source files and
+  generated files, records the audit, ignored sources, row count, and Git commit.
+
+`annotations/` is not inside `output/` because it contains irreplaceable human
+state. Everything in `output/` is safe to rebuild.

@@ -1,267 +1,117 @@
-# Decision log (ADRs)
+# Architecture decision record
 
-Every "we chose X over Y, because Z" lives here so future sessions don't
-re-litigate settled questions. Newest at the bottom. Don't rewrite history —
-supersede old decisions with new entries.
+This file records current decisions and why they exist. Previous wording and
+superseded experiments remain available in Git history; this document describes
+the system as it works now.
 
----
+## 0001 — Official records are immutable evidence
 
-## 0001: CSV first, Sheets API later
+`records/` is private and never rewritten by automation. PDF statements remain
+authoritative even if a future Plaid-style source provides cleaner structured
+transactions. Derived data must point back to source file, page, line, and hash.
 
-**Decision:** Output is CSV files in `output/` (gitignored). A Google Sheets
-writer comes later, consuming the same transaction data.
+## 0002 — Evidence, decisions, and exports are separate
 
-**Why:** Trust must be earned before automation touches the real
-spreadsheet, which already contains hand-annotated work. CSVs are eyeball-able
-and zero-risk. The Sheets API supports submitting an entire table in one
-request, so the future writer is a small addition, not a rewrite — the CSV
-phase is not throwaway work.
+- `records/`: evidence that cannot be regenerated
+- `annotations/`: human decisions that cannot be regenerated
+- `output/`: generated views that can be rebuilt
+- `backups/`: recovery snapshots, baseline, and journal
 
----
+Annotations do not belong under output merely because the application created
+the initial rows. Human edits change their ownership and durability.
 
-## 0002: Plugin architecture for parsers
+## 0003 — Plugins isolate institution-specific ingestion
 
-**Decision:** Bank-specific reading logic lives in one file per bank under
-`tools/parsers/`. The engine routes PDFs to whichever plugin claims them and
-contains zero bank-specific code.
+Chase and Cash App parsers implement one interface and emit canonical
+statements/transactions. Core auditing, annotation, output, Discord, Sheets, and
+future API sources must not contain Chase/Cash-App parsing knowledge.
 
-**Why:** Banks will change (the user has said as much). The cost of a new
-bank should be exactly one new file. This also makes the Cash App stub
-harmless: unclaimed PDFs are reported, never silently dropped.
+## 0004 — Transaction identity and comparison fingerprints are different
 
----
+A content fingerprint answers "do these rows look alike?" It is not unique.
+A Transaction ID answers "which exact source row is this?" and incorporates
+statement identity, source values, running balance where available, and an
+occurrence number. Exact repeated charges stay separately annotatable.
 
-## 0003: Exactly the tax professional's 4 columns — but columns are config
+This supersedes the original fingerprint-as-primary-key design, which collapsed
+legitimate duplicate charges.
 
-**Decision:** CSVs contain `Amount, Date, Merchant, Bank Description` and
-nothing else. Column names and order come from `config.yaml`; the writer
-*can* emit extra columns (Account, Source File, Fingerprint) but they're off
-by default.
+## 0005 — Audit real relationships, test known failures
 
-**Why:** The tax pro's downstream systems expect the 4-column format and he
-charges per filing, so his workflow is not ours to disrupt. At the same time,
-we don't want a format change to ever require a code change.
+Real-record auditing treats ingestion as a black box and compares it with
+statement summaries, periods, and running balances. Synthetic regression tests
+encode only meaningful contracts and failures actually observed. Neither
+replaces the other.
 
----
+Output and annotation rewrites are refused when real-record audits fail.
 
-## 0004: Include all transactions by default
+## 0006 — Every discovered source receives a disposition
 
-**Decision:** Default `include: all` — income and expenses both go in.
+A file is parsed, unclaimed, errored, or explicitly ignored with a reason.
+Non-PDF files such as Venmo CSV exports cannot remain invisible merely because
+that source plugin is not implemented yet.
 
-**Why:** We don't know what the tax professional doesn't want to see, and
-excluding data is a one-way door. If he later asks for expenses only, it's a
-one-word config change (`include: expenses`), implemented in
-`pipeline/filters.py`.
+## 0007 — Human decisions and rule suggestions use separate columns
 
----
+Rules write Suggested Category/Note plus Rule ID/Version. Humans write Category,
+Tax Treatment, and Note. Rules can be refreshed as often as needed and never
+overwrite human fields. Suggestions remain in `need-you` until reviewed.
 
-## 0005: Sensitive data never enters git
+Legacy 2022 data was migrated conservatively: existing non-rule text became
+human state; other years were regenerated because the user confirmed only 2022
+contained hand-written work.
 
-**Decision:** `records/` (the PDFs), `output/` (generated CSVs), and `.venv/`
-are gitignored. The repo is intended to be public.
+## 0008 — Rules are year-aware policy data, not tax conclusions
 
-**Why:** The PDFs contain full name, address, and partial account numbers.
-Generated CSVs contain complete transaction histories. One `.gitignore` line
-per folder is the simplest reliable barrier. Rule: never `git add -f`
-anything under those paths. Audit `git status` before every push.
+Private rules have stable IDs, versions, and optional year/institution/account
+scope. They suggest merchant classification. Merchant identity alone does not
+prove business purpose or deductibility; Tax Treatment and Note require a human.
 
----
+Real rules are private at `config/rules.yaml`. Only a sanitized example is
+committed publicly.
 
-## 0006: Code lives in `tools/`, docs split by audience
+## 0009 — Durable state uses snapshot + atomic replacement + journal
 
-**Decision:** `tools/` holds all automation code; `docs/automation/` for the
-machinery, `docs/tax-professional/` for human-tax-pro material; a flat
-repo-facing `README.md` at the root.
+Before replacing an existing file, create a timestamped snapshot. Write and
+fsync a temporary file, validate it, then atomically replace the destination.
+A private baseline detects external human-column edits on the next refresh and
+records them in an append-only journal.
 
-**Why:** A stranger (or a fresh AI session) should be able to read the root
-README and immediately know where things live. The tax-pro docs predate the
-automation and serve a different reader; merging them would serve neither.
+This pattern also governs future network ingestion: stage, validate, hash,
+journal, then commit. Wi-Fi loss must preserve the last accepted state.
 
----
+## 0010 — Output has raw, draft, final, and manifest layers
 
----
+`output/raw` preserves all available source-level fields and provenance.
+`output/tax-professional-draft` maps canonical transactions and annotations to
+the professional's four columns. `output/final` is blocked until every row is
+human-reviewed and the audit passes. A manifest hashes sources/outputs and
+records audit results, parser identity, row counts, ignored files, and Git
+commit.
 
-## 0007: Reconciliation audit over unit tests
+The configured fourth-column mapping is currently human `Note`; it must be
+confirmed with the tax professional before final use.
 
-**Decision:** Correctness is proven by reconciling parsed transactions
-against the summaries each statement prints about itself (`main.py audit`),
-not by a conventional unit-test suite.
+## 0011 — The work queue is reusable by any interface
 
-**Why:** The statements are the ground truth. A unit test can only assert
-what we already believe the PDF says; the reconciliation check asserts what
-the *bank* says happened, in dollars and cents. It caught two real things on
-its first run that no amount of eyeballing had: a duplicated statement file
-in 2024, and the fact that Cash App's bank-funded payments never touch the
-Cash App balance. When the audit passes, "is the output accurate?" has a
-provable answer. See `docs/automation/auditing.md` Level 4.
+`need-you` selection and ordering are pure logic. CLI, Discord, TUI, or web UI
+may render it differently but must use Transaction IDs and the same annotation
+service. Interfaces may approve, override, defer, or explain; they do not parse
+statements or decide tax treatment.
 
----
-
----
-
-## 0008: Annotations are local input files; the sheet is a pure output
-
-**Decision:** The "why" behind each expense (what the tax pro needs for
-write-offs) is captured in `annotations/<year>.csv` files the pipeline
-generates and the human fills in — NOT typed directly into the Google Sheet.
-
-**Why:** Human judgment is a first-class *input* and must live in files we
-own: durable, re-runnable, and safe from any sheet rebuild. The Google Sheet
-becomes a *view* of (transactions + annotations), never the place work
-happens. Each annotation row carries the transaction's fingerprint, so
-re-running `annotate` re-associates human work with the right transaction
-even after re-parsing or re-sorting — and never overwrites a filled row.
-This also defers the Sheets writer until the sheet's final shape
-(transactions + annotations merged) is known, so we build it once.
-
-**Consequence:** `annotations/` is gitignored like `records/` and `output/` —
-it contains financial judgments about real transactions.
-
----
-
----
-
-## 0009: Dollar reconciliation per statement; dedupe only across files
-
-**Decision:** The Chase audit must reconcile *dollars*, not just statement
-chaining: each statement's parsed transaction sum must equal its own printed
-balance delta. And dedupe must only remove a charge when it appears in TWO
-different statements (overlap) — never collapse identical charges within one
-statement.
-
-**Why (this was earned, not theorized):** A user spot-check found missing
-transactions, which exposed THREE compounding bugs the date-chaining audit
-had silently allowed — 868 missing transactions (18% of all data):
-
-1. **Marker-format bug:** newer statements use `*start*transactiondetail`
-   (no spaces) vs the old spaced form → whole files read as 0 transactions
-   while reporting "parsed successfully."
-2. **Page-boundary fusion:** at page breaks, the text layer fuses the
-   `*end*` marker + footer + the page's last transaction into one mangled
-   line (`*end*transac1tion detail0/31 Zelle Payment...`), silently dropping
-   that transaction and corrupting its date. 53 such lines across 33 files.
-3. **Dedupe false-positives:** identical same-statement charges (a
-   double-billed gym membership) share a fingerprint and were being dropped
-   as "duplicates." Investigating revealed statements never actually overlap
-   in content — every prior "duplicates removed" count was this bug.
-
-The lesson baked into the audit: **chaining/dates prove structure, only
-dollars prove extraction.** Any future parser change must keep the
-balance-delta check green.
-
----
-
----
-
-## 0010: PDFs remain the source of truth; bank APIs are a future ingestion source
-
-**Decision:** The official statement PDFs stay authoritative. A bank-data
-API (Plaid/MX/Finity) may be added LATER as a new *source plugin* feeding
-the same Transaction model — not as a replacement for the PDFs.
-
-**Why:** For taxes, the official statement is the document that matters to a
-tax professional or the IRS; an aggregator's transaction feed is not the
-same artifact. Chase offers no friendly self-serve API for personal
-statement downloads (its APIs target commercial banking); account
-aggregators (Plaid et al.) provide clean JSON/CSV via OAuth but it's
-transaction history, not official statements, and auto-downloading real
-PDFs needs fragile browser automation. The pipeline's plugin design means a
-future API source is one new file — no reason to disturb the now-proven
-2022–2025 extraction.
-
-**Future hook (noted, not built):** a background "automation center" with a
-Discord front-end for annotating ambiguous transactions on the go. The
-annotation store's fingerprint design supports this; deferred deliberately.
-
----
-
----
-
-## 0011: Rules suggest, humans decide — and rules never overwrite
-
-**Decision:** Auto-annotation is a *suggestion* layer. Rules live in plain
-`tools/rules.yaml` (data, not code) and fill only cells the human has left
-empty. A hand-typed Category/Note always wins over a rule.
-
-**Why:** The tax pro needs the human's judgment on the ambiguous cases, but
-~90% of transactions are obvious (Chick-Fil-A is always Meals). Rules
-eliminate that toil without ever overriding intent. The engine is a pure
-function `(transaction, rules) -> suggestion` with no I/O — deliberately
-shaped so a future front-end (the Discord bot idea in 0010) can reuse the
-exact same matching logic. First-match-wins ordering puts specific merchants
-before general ones, all controlled by editing the yaml.
-
-**Consequence:** once a rule fills a row it becomes the human's to edit;
-the next `annotate` run treats it as existing work and won't re-suggest.
-
----
-
----
-
-## 0012: The audit must prove dates and row integrity, not just amounts
-
-**Decision:** The Chase audit has five checks, not three: statement chaining,
-balance-delta reconciliation, **date-range** (every transaction falls inside
-its statement's period), and **running-balance chain** (each row's printed
-balance == previous balance + amount). Transaction years are inferred from
-the statement period, not stamped from the folder.
-
-**Why (again earned, not theorized):** Tightening the audit at the user's
-request immediately exposed two more bug families the amount-only check
-couldn't see:
-
-1. **Fused-date corruption, second form:** the leading digit of a fused
-   date isn't always `1` — `transac0tion detail7/15` is `07/15`, not
-   `17/15`. The digit must be recovered from inside the corrupted marker.
-2. **Year-boundary mis-stamping:** statements spanning Dec→Jan had December
-   transactions stamped with the folder's year instead of the prior year —
-   and fused transactions bypassed the fix entirely because `_recover_fused`
-   received the raw folder year.
-
-The running-balance chain is the strongest check we have: it validates every
-row independently and catches merged, split, or reordered rows that a sum
-would wave through. If all five checks are green, the CSV is as proven as
-the bank's own paper.
-
----
-
----
-
-## 0013: The annotation work-queue is a pure query, ranking is pluggable
-
-**Decision:** `need-you <year>` (rows that still need a human, ranked by
-importance) is a pure function in `annotations/report.py` — no printing, no
-CSV knowledge, no
-front-end assumptions. Ranking is a pluggable registry (`largest`,
-`smallest`, `oldest`, `newest`, `merchant`), and scope (expenses-only vs
-all) is a parameter.
-
-**Why:** The user annotates over a long period and asked for two things that
-shape the design: (1) rank highest-to-least so big write-offs get done
-first, and (2) keep it decoupled so a future Discord bot can reuse the exact
-same query — including a future flow where the bot *suggests* a rule and the
-user approves or overrides it for special tax cases. A pure query function
-plus a thin CLI renderer gives us that seam for free. New orderings are one
-entry in `ORDERINGS`, not new logic.
-
----
-
-## Known technical debt (accepted, not forgotten)
-
-- **Year stamping.** Transaction dates come from MM/DD on the statement and
-  inherit the folder's year. Statements straddling New Year will mislabel a
-  handful of early-January transactions. Proper fix: parse the statement
-  period header ("March 09, 2023 through April 10, 2023") and infer each
-  transaction's year from it. Deliberately deferred — baby steps.
-- **2026 is excluded from config for now.** Its Cash App folder is empty
-  (no statements yet). Add `2026` to `years:` in `tools/config.yaml` when
-  statements exist.
-- **Merchant cleanup is naive.** Regex stripping, not entity resolution.
-  Acceptable because the raw description column is always preserved and a
-  human reviews the Merchant column anyway.
-- **Merchant column is best-effort.** Regex stripping, not entity
-  resolution; always meant for human review. The audit proves amounts,
-  dates, and row integrity — Merchant naming is the one field it does not.
-- ~~**2024 duplicate count (98)**~~ RESOLVED by the audit (0007): a
-  misnamed duplicate `Jun-10.pdf` duplicated the `May-8.pdf` statement.
-  Deleted; 2024 now dedupes a normal 4 overlaps.
+## 0012 — Public repository uses private runtime configuration
+
+Transaction data, annotations, backups, outputs, professional notes, and actual
+rules are ignored. `config/rules.example.yaml` and
+`docs/tax-professional.example.md` document shapes without publishing new
+personal details. Previously published history is accepted by the owner, but no
+new private operational data should enter commits.
+
+## Accepted limitations
+
+- Merchant cleanup is best-effort and human-reviewed.
+- PDF parser and audit both depend on PDF text extraction; independent statement
+  arithmetic and synthetic regressions reduce but cannot make that risk zero.
+- Venmo CSV ingestion is intentionally deferred and explicitly reported.
+- A network bank-data source, Discord interface, and Google Sheets integration
+  are future adapters, not core logic.

@@ -1,1 +1,0 @@
-"""Annotation workflow package."""

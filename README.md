@@ -1,31 +1,34 @@
-# Taxes
+# Tax Records Automation
 
-Personal tax-record organization, with a growing set of automation tools.
+A private-first pipeline that turns official bank statements into auditable
+transaction records, preserves human explanations, and prepares controlled
+four-column drafts for a tax professional.
 
-This repo serves two audiences:
+The repository is public. Financial records, annotation files, real rules,
+backups, generated outputs, and tax-professional notes are private and ignored
+by Git.
 
-- **My tax professional** — human-readable yearly records and summaries live in
-  [`docs/tax-professional/`](docs/tax-professional/). The documents themselves
-  (bank statements, 1099s, IRS transcripts) live in `records/`, which is
-  **not committed to git** for privacy.
-- **Automation** — Python tooling that reads bank statement PDFs and produces
-  per-year CSVs of transactions, ready to paste into a Google Sheet. See
-  [`docs/automation/overview.md`](docs/automation/overview.md) first.
+## Start here
 
-## Quick start
+1. Read [`docs/automation/overview.md`](docs/automation/overview.md).
+2. Install: `.venv/Scripts/pip install -e .`
+3. Audit: `python run.py audit 2022`
+4. Refresh annotations safely: `python run.py annotate 2022`
+5. See rows needing a human: `python run.py need-you 2022`
+6. Build raw evidence and a professional draft: `python run.py build 2022`
 
-```bash
-# from the repo root, with the virtualenv set up (see docs/automation/setup.md)
-.venv/Scripts/python tools/main.py verify-year 2023   # read-only, writes nothing
-.venv/Scripts/python tools/main.py run                # writes CSVs to output/
-```
+A final export is deliberately blocked until every row has human review and
+the audit passes. Google Sheets writing is not implemented yet.
 
-## Layout
+## Data boundaries
 
-| Path | What it is | Committed? |
+| Path | Meaning | Git |
 |---|---|---|
-| `records/` | Financial documents, organized by year | ❌ private |
-| `output/` | Generated CSVs | ❌ contains financial data |
-| `tools/` | The automation code | ✅ |
-| `docs/automation/` | How and why the automation works | ✅ |
-| `docs/tax-professional/` | Notes written for a human tax pro | ✅ |
+| `records/` | Original evidence; never rewritten | ignored |
+| `annotations/` | Durable human decisions and rule suggestions | ignored |
+| `output/` | Rebuildable raw/draft/final exports and manifests | ignored |
+| `backups/` | Automatic snapshots, baseline state, and journal | ignored |
+| `config/rules.yaml` | Real year-aware rules | ignored |
+| `config/rules.example.yaml` | Sanitized public example | tracked |
+| `src/financial_automation/` | Application code | tracked |
+| `tests/` | Small regression suite for real failures | tracked |

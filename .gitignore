@@ -1,6 +1,21 @@
-.venv/
-records/
-output/
-# the data folder at repo root, NOT the tools/annotations code package
+# Private source records, durable human state, and professional notes
+/records/
 /annotations/
+/backups/
+/docs/tax-professional/
+
+# Generated financial exports
+/output/
+
+# Private rules (copy config/rules.example.yaml)
+/config/rules.yaml
+
+# Local Python environment and caches
+/.venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Temporary files from atomic writes
+*.tmp
