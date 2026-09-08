@@ -1,0 +1,53 @@
+# Auto-annotation rules. First match wins — put specific merchants first.
+# Edit freely: this is plain data, not code. Re-run `annotate` to apply.
+#
+# Each rule:
+#   match:    substring to find in merchant/description (case-insensitive)
+#   category: suggested Category (your consistent label)
+#   note:     suggested Note (optional; the "why" for your tax pro)
+#
+# These are SUGGESTIONS — they never overwrite a Category/Note you typed.
+
+- match: chick-fil-a
+  category: Meals
+- match: mcdonald
+  category: Meals
+- match: whataburger
+  category: Meals
+- match: texas roadhouse
+  category: Meals
+- match: wingstop
+  category: Meals
+- match: jersey mikes
+  category: Meals
+- match: taco
+  category: Meals
+
+- match: circle k
+  category: Fuel
+- match: exxon
+  category: Fuel
+- match: valero
+  category: Fuel
+- match: shell
+  category: Fuel
+- match: chevron
+  category: Fuel
+
+- match: spectrum
+  category: Utilities
+  note: internet
+- match: city public srv
+  category: Utilities
+  note: CPS energy
+
+- match: golds gym
+  category: Health
+  note: gym membership
+
+- match: amazon
+  category: Supplies
+- match: wal-mart
+  category: Supplies
+- match: h-e-b
+  category: Groceries

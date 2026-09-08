@@ -48,6 +48,8 @@ tax-pro preferences change; the pipeline shape shouldn't have to.
 - Reconciliation audit (Level 4) proves extraction per year.
 - Annotation workflow: `annotate` generates per-year files you fill in
   (Category/Note); re-running preserves your work. See decision 0008.
+- Rules auto-fill: `tools/rules.yaml` auto-labels obvious merchants
+  (Chick-Fil-A→Meals); suggests only, never overwrites you. Decision 0011.
 - Google Sheets writer: not started — deferred until annotations define the
   sheet's final shape (decision 0008), so it's built once.
 

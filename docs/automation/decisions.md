@@ -151,6 +151,51 @@ balance-delta check green.
 
 ---
 
+---
+
+## 0010: PDFs remain the source of truth; bank APIs are a future ingestion source
+
+**Decision:** The official statement PDFs stay authoritative. A bank-data
+API (Plaid/MX/Finity) may be added LATER as a new *source plugin* feeding
+the same Transaction model — not as a replacement for the PDFs.
+
+**Why:** For taxes, the official statement is the document that matters to a
+tax professional or the IRS; an aggregator's transaction feed is not the
+same artifact. Chase offers no friendly self-serve API for personal
+statement downloads (its APIs target commercial banking); account
+aggregators (Plaid et al.) provide clean JSON/CSV via OAuth but it's
+transaction history, not official statements, and auto-downloading real
+PDFs needs fragile browser automation. The pipeline's plugin design means a
+future API source is one new file — no reason to disturb the now-proven
+2022–2025 extraction.
+
+**Future hook (noted, not built):** a background "automation center" with a
+Discord front-end for annotating ambiguous transactions on the go. The
+annotation store's fingerprint design supports this; deferred deliberately.
+
+---
+
+---
+
+## 0011: Rules suggest, humans decide — and rules never overwrite
+
+**Decision:** Auto-annotation is a *suggestion* layer. Rules live in plain
+`tools/rules.yaml` (data, not code) and fill only cells the human has left
+empty. A hand-typed Category/Note always wins over a rule.
+
+**Why:** The tax pro needs the human's judgment on the ambiguous cases, but
+~90% of transactions are obvious (Chick-Fil-A is always Meals). Rules
+eliminate that toil without ever overriding intent. The engine is a pure
+function `(transaction, rules) -> suggestion` with no I/O — deliberately
+shaped so a future front-end (the Discord bot idea in 0010) can reuse the
+exact same matching logic. First-match-wins ordering puts specific merchants
+before general ones, all controlled by editing the yaml.
+
+**Consequence:** once a rule fills a row it becomes the human's to edit;
+the next `annotate` run treats it as existing work and won't re-suggest.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and
@@ -164,6 +209,10 @@ balance-delta check green.
 - **Merchant cleanup is naive.** Regex stripping, not entity resolution.
   Acceptable because the raw description column is always preserved and a
   human reviews the Merchant column anyway.
+- **Audit gaps remain.** Balance-delta reconciliation proves *amounts*
+  complete but NOT: correctness of dates, transaction *counts* (Chase prints
+  no count), or Merchant-column quality. A wrong-date-right-amount row would
+  pass. Tightening this (date-range checks, count heuristics) is future work.
 - ~~**2024 duplicate count (98)**~~ RESOLVED by the audit (0007): a
   misnamed duplicate `Jun-10.pdf` duplicated the `May-8.pdf` statement.
   Deleted; 2024 now dedupes a normal 4 overlaps.

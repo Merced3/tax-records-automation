@@ -28,6 +28,10 @@ From the repo root:
 
 # Generate output/<year>.csv for every year in config.yaml.
 .venv/Scripts/python tools/main.py run
+
+# Generate/refresh the annotation file for a year (auto-fills obvious
+# merchants from tools/rules.yaml, preserves your hand-edits).
+.venv/Scripts/python tools/main.py annotate 2023
 ```
 
 **Important:** always invoke via `python tools/main.py ...` (or

@@ -50,32 +50,46 @@ def load_existing(path):
     return out
 
 
-def generate(transactions, path):
+def generate(transactions, path, suggester=None):
     """Write the annotation file for a year, preserving existing human work.
 
-    Returns (total, annotated, carried_over) counts.
+    suggester: optional callable(transaction) -> Annotation, used to fill
+    cells the human has NOT already filled (rules engine). Human work always
+    wins: a cell you typed is never overwritten by a suggestion.
+
+    Returns (total, annotated, carried_over, suggested) counts.
     """
     existing = load_existing(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    total = annotated = carried = 0
+    total = annotated = carried = suggested = 0
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(HEADER)
         for t in transactions:
             total += 1
             prior = existing.get(t.fingerprint, Annotation())
-            if prior.filled:
+            if t.fingerprint in existing and prior.filled:
+                carried += 1
+
+            category, note = prior.category, prior.note
+            # Apply a rule suggestion only to cells still empty.
+            if suggester is not None and not prior.filled:
+                sugg = suggester(t)
+                if sugg.filled:
+                    suggested += 1
+                    category = category or sugg.category
+                    note = note or sugg.note
+
+            if (category or note).strip():
                 annotated += 1
-                if t.fingerprint in existing:
-                    carried += 1
             writer.writerow([
                 t.fingerprint,
                 t.date,
                 f"{t.amount:.2f}",
                 t.merchant,
                 t.description,
-                prior.category,
-                prior.note,
+                category,
+                note,
             ])
-    return total, annotated, carried
+    return total, annotated, carried, suggested

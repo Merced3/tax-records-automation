@@ -142,18 +142,23 @@ def cmd_audit(year, config):
 
 
 def cmd_annotate(year, config):
+    from annotations import rules
     records = os.path.join(REPO_ROOT, config["records_root"])
     txns, report = run_year(records, year)
     txns = filters.apply(txns, config["include"])
 
+    rule_list = rules.load_rules(os.path.join(REPO_ROOT, "tools", "rules.yaml"))
+    suggester = (lambda t: rules.suggest(t, rule_list)) if rule_list else None
+
     out_dir = os.path.join(REPO_ROOT, "annotations")
     path = os.path.join(out_dir, f"{year}.csv")
-    total, annotated, carried = store.generate(txns, path)
+    total, annotated, carried, suggested = store.generate(txns, path, suggester)
 
     print(f"{year}: wrote {os.path.relpath(path, REPO_ROOT)}")
-    print(f"  transactions:      {total}")
-    print(f"  already annotated: {annotated} ({carried} carried over from prior file)")
-    print(f"  to annotate:       {total - annotated}")
+    print(f"  transactions:        {total}")
+    print(f"  auto-filled by rules:{suggested:5d}  (edit tools/rules.yaml to tune)")
+    print(f"  annotated by you:    {carried:5d}  (carried over, never overwritten)")
+    print(f"  still to annotate:   {total - annotated:5d}")
     print(f"\nFill in the Category and Note columns, then re-run anytime.")
 
 
