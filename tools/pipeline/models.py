@@ -21,6 +21,10 @@ class Transaction:
     source_account: str    # e.g. "Everyday Spend Bank Account"
     source_file: str       # path of the PDF this came from
     fingerprint: str = field(default="")
+    # Running balance printed at the end of this transaction's line, if the
+    # statement provides one (Chase does). Lets the audit verify the
+    # balance chain independently of amounts — catches merged/split rows.
+    balance: float = field(default=None)
 
     def __post_init__(self):
         if not self.fingerprint:

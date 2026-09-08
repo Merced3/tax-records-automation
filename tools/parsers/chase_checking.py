@@ -16,6 +16,9 @@ import pdfplumber
 from parsers.base import StatementParser
 from pipeline.models import Transaction
 
+_MONTH = ("January|February|March|April|May|June|July|August|September|"
+          "October|November|December")
+
 # A transaction line: date, description, amount, running balance.
 TXN_RE = re.compile(
     r"^(\d{2}/\d{2})\s+(.+?)\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$"
@@ -35,10 +38,12 @@ _END_MARKER_FUSED = re.compile(r"\*end\*transac\w*\s*detail", re.IGNORECASE)
 _PAGE_FOOTER = re.compile(r"^Page\s+of\s*$|^\d+\s+\d+$")
 
 # When the end-marker fuses with a transaction, the date's leading digit gets
-# absorbed: real "10/31" appears as "transac1tion detail0/31" — the "1" went
-# into "transac1tion" and "detail" swallowed the rest. We recover it as
-# "1" + the digits that follow "detail".
-_FUSED_DATE = re.compile(r"detail(\d/\d{2})")
+# absorbed into the corrupted marker: real "10/31" appears as
+# "transac1tion detail0/31" (digit 1 in "transac1tion", rest "0/31" after
+# "detail"), and real "07/15" appears as "transac0tion detail7/15" (digit 0
+# in "transac0tion"). So the leading digit is whatever is trapped inside
+# "transac<D>tion", and the remainder follows "detail".
+_FUSED_DATE = re.compile(r"transac(\d)tion\s+detail(\d/\d{2})")
 
 # Noise we strip out of descriptions to guess a merchant name.
 # Best-effort only — the raw description column always keeps the full text.
@@ -67,6 +72,12 @@ class ChaseCheckingParser(StatementParser):
     def parse(self, path, source_account, year):
         transactions = []
         with pdfplumber.open(path) as pdf:
+            # Determine the statement period so transactions near a year
+            # boundary get the RIGHT year, not just the folder's year. A
+            # statement spanning Dec->Jan has December txns from the prior
+            # year; stamping them with the folder year is wrong.
+            first_text = pdf.pages[0].extract_text() or ""
+            start_year, end_year = self._period_years(first_text, year)
             in_detail = False
             for page in pdf.pages:
                 text = page.extract_text() or ""
@@ -85,7 +96,8 @@ class ChaseCheckingParser(StatementParser):
                     # (see _FUSED_DATE note). Detect it loosely because fusion
                     # corrupts the marker text itself.
                     if "*end*transac" in squashed:
-                        txn = self._recover_fused(line, source_account, path, year)
+                        txn = self._recover_fused(line, source_account, path,
+                                                  start_year, end_year)
                         if in_detail and txn is not None:
                             transactions.append(txn)
                         in_detail = False
@@ -98,9 +110,11 @@ class ChaseCheckingParser(StatementParser):
 
                     m = TXN_RE.match(line)
                     if m:
-                        date_mmdd, desc, amount_s, _balance = m.groups()
+                        date_mmdd, desc, amount_s, balance_s = m.groups()
+                        txn_year = self._txn_year(date_mmdd, start_year, end_year)
                         transactions.append(self._make_txn(
-                            date_mmdd, desc, amount_s, source_account, path, year
+                            date_mmdd, desc, amount_s, source_account, path,
+                            txn_year, balance_s
                         ))
                     elif (transactions and line
                           and not line.startswith("DATE")
@@ -111,31 +125,59 @@ class ChaseCheckingParser(StatementParser):
                         transactions[-1].description += " " + line
         return transactions
 
-    def _recover_fused(self, line, account, path, year):
+    # Statement period header, e.g. "December 09, 2022 through January 10,
+    # 2023" (older) or "December 09, 2022throughJanuary 10, 2023" (no space).
+    _PERIOD_RE = re.compile(
+        rf"({_MONTH})\s+\d{{1,2}},\s+(\d{{4}})\s*through\s*({_MONTH})\s+\d{{1,2}},\s+(\d{{4}})"
+    )
+
+    @classmethod
+    def _period_years(cls, first_text, fallback):
+        m = cls._PERIOD_RE.search(first_text)
+        if not m:
+            return fallback, fallback
+        return int(m.group(2)), int(m.group(4))
+
+    @staticmethod
+    def _txn_year(date_mmdd, start_year, end_year):
+        """A Dec date in a Dec->Jan statement belongs to start_year; a Jan
+        date to end_year. When the statement sits within one year they're
+        equal and this is just that year."""
+        month = int(date_mmdd.split("/")[0])
+        if start_year != end_year:
+            # Cross-year statement: Dec(12) -> start_year, Jan(1) -> end_year.
+            return start_year if month == 12 else end_year
+        return start_year
+
+    def _recover_fused(self, line, account, path, start_year, end_year):
         """Pull a transaction out of a line fused with the end-marker.
 
         Returns a Transaction, or None if the line is just the marker with no
-        transaction glued on. The date's leading digit is absorbed into the
-        corrupted marker ("transac1tion detail0/31" = date 10/31); we rebuild
-        it as "1" + whatever digit follows "detail".
+        transaction glued on. The date's leading digit is trapped inside the
+        corrupted marker ("transac1tion detail0/31" = 10/31, "transac0tion
+        detail7/15" = 07/15); we rebuild it from both captured pieces.
         """
         dm = _FUSED_DATE.search(line)
         if not dm:
             return None
-        date_mmdd = "1" + dm.group(1)
+        date_mmdd = dm.group(1) + dm.group(2)
+        year = self._txn_year(date_mmdd, start_year, end_year)
         # Strip everything up through "detail<date>" to isolate the
         # description + amount + balance.
         tail = line[dm.end():].strip()
         m = re.match(r"^(.+?)\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$", tail)
         if not m:
             return None
-        desc, amount_s, _balance = m.groups()
-        return self._make_txn(date_mmdd, desc, amount_s, account, path, year)
+        desc, amount_s, balance_s = m.groups()
+        return self._make_txn(date_mmdd, desc, amount_s, account, path, year,
+                              balance_s)
 
-    def _make_txn(self, date_mmdd, desc, amount_s, account, path, year):
+    def _make_txn(self, date_mmdd, desc, amount_s, account, path, year,
+                  balance_s=None):
         amount = float(amount_s.replace(",", ""))
         date = f"{date_mmdd}/{year}"
         merchant = _clean_merchant(desc) or desc
+        balance = float(balance_s.replace(",", "")) if balance_s else None
         return Transaction(
             amount=amount,
             date=date,
@@ -143,4 +185,5 @@ class ChaseCheckingParser(StatementParser):
             description=desc,
             source_account=account,
             source_file=str(path),
+            balance=balance,
         )

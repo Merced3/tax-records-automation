@@ -196,6 +196,35 @@ the next `annotate` run treats it as existing work and won't re-suggest.
 
 ---
 
+---
+
+## 0012: The audit must prove dates and row integrity, not just amounts
+
+**Decision:** The Chase audit has five checks, not three: statement chaining,
+balance-delta reconciliation, **date-range** (every transaction falls inside
+its statement's period), and **running-balance chain** (each row's printed
+balance == previous balance + amount). Transaction years are inferred from
+the statement period, not stamped from the folder.
+
+**Why (again earned, not theorized):** Tightening the audit at the user's
+request immediately exposed two more bug families the amount-only check
+couldn't see:
+
+1. **Fused-date corruption, second form:** the leading digit of a fused
+   date isn't always `1` — `transac0tion detail7/15` is `07/15`, not
+   `17/15`. The digit must be recovered from inside the corrupted marker.
+2. **Year-boundary mis-stamping:** statements spanning Dec→Jan had December
+   transactions stamped with the folder's year instead of the prior year —
+   and fused transactions bypassed the fix entirely because `_recover_fused`
+   received the raw folder year.
+
+The running-balance chain is the strongest check we have: it validates every
+row independently and catches merged, split, or reordered rows that a sum
+would wave through. If all five checks are green, the CSV is as proven as
+the bank's own paper.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and
@@ -209,10 +238,9 @@ the next `annotate` run treats it as existing work and won't re-suggest.
 - **Merchant cleanup is naive.** Regex stripping, not entity resolution.
   Acceptable because the raw description column is always preserved and a
   human reviews the Merchant column anyway.
-- **Audit gaps remain.** Balance-delta reconciliation proves *amounts*
-  complete but NOT: correctness of dates, transaction *counts* (Chase prints
-  no count), or Merchant-column quality. A wrong-date-right-amount row would
-  pass. Tightening this (date-range checks, count heuristics) is future work.
+- **Merchant column is best-effort.** Regex stripping, not entity
+  resolution; always meant for human review. The audit proves amounts,
+  dates, and row integrity — Merchant naming is the one field it does not.
 - ~~**2024 duplicate count (98)**~~ RESOLVED by the audit (0007): a
   misnamed duplicate `Jun-10.pdf` duplicated the `May-8.pdf` statement.
   Deleted; 2024 now dedupes a normal 4 overlaps.

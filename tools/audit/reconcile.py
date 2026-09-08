@@ -20,7 +20,7 @@ Money is compared in integer cents; float dust never causes false alarms.
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pdfplumber
 
@@ -168,26 +168,78 @@ def audit_chase(paths, txns_by_file=None):
                            f"{account}: {len(stmts)} statements chain consecutively"
                            + ("" if not problems else " — " + "; ".join(problems))))
 
-    # Per-statement dollar reconciliation: sum(parsed) == ending - beginning.
     if txns_by_file is not None:
-        mismatches = []
-        checked = 0
-        for p, s in summaries.items():
-            txns = txns_by_file.get(p)
-            if txns is None:
-                continue
-            checked += 1
-            got = int(round(sum(t.amount for t in txns) * 100))
-            expected = s.end_cents - s.begin_cents
-            if got != expected:
-                mismatches.append(
-                    f"{os.path.basename(p)}: sum {dollars(got)} "
-                    f"!= delta {dollars(expected)} (off {dollars(got - expected)})")
-        res.checks.append((not mismatches,
-                           f"{checked} statements: parsed sums == balance deltas"
-                           + ("" if not mismatches
-                              else " — " + "; ".join(mismatches))))
+        _audit_chase_dollars(res, summaries, txns_by_file)
+        _audit_chase_dates(res, summaries, txns_by_file)
+        _audit_chase_balance_chain(res, summaries, txns_by_file)
     return res
+
+
+def _audit_chase_dollars(res, summaries, txns_by_file):
+    """Each statement's parsed sum must equal its own balance delta."""
+    mismatches, checked = [], 0
+    for p, s in summaries.items():
+        txns = txns_by_file.get(p)
+        if txns is None:
+            continue
+        checked += 1
+        got = int(round(sum(t.amount for t in txns) * 100))
+        expected = s.end_cents - s.begin_cents
+        if got != expected:
+            mismatches.append(
+                f"{os.path.basename(p)}: sum {dollars(got)} "
+                f"!= delta {dollars(expected)} (off {dollars(got - expected)})")
+    res.checks.append((not mismatches,
+                       f"{checked} statements: parsed sums == balance deltas"
+                       + ("" if not mismatches else " — " + "; ".join(mismatches))))
+
+
+def _audit_chase_dates(res, summaries, txns_by_file):
+    """Every transaction date must fall inside its statement's period.
+    Catches right-amount-wrong-date rows the dollar check can't see."""
+    bad, checked = [], 0
+    for p, s in summaries.items():
+        txns = txns_by_file.get(p)
+        if txns is None:
+            continue
+        checked += 1
+        for t in txns:
+            try:
+                d = datetime.strptime(t.date, "%m/%d/%Y")
+            except ValueError:
+                bad.append(f"{os.path.basename(p)}: unparseable date {t.date!r}")
+                continue
+            # Allow the period's start/end inclusive; a 1-day slack for the
+            # few statements whose first txn posts the day after 'start'.
+            if not (s.start - timedelta(days=1) <= d <= s.end + timedelta(days=1)):
+                bad.append(f"{os.path.basename(p)}: {t.date} outside "
+                           f"{s.start:%m/%d}-{s.end:%m/%d}")
+    res.checks.append((not bad,
+                       f"{checked} statements: all dates within statement periods"
+                       + ("" if not bad else " — " + "; ".join(bad[:6]))))
+
+
+def _audit_chase_balance_chain(res, summaries, txns_by_file):
+    """Each row's printed running balance must equal prev balance + amount.
+    Independent of sums — catches merged, split, or reordered rows."""
+    bad, checked = [], 0
+    for p, s in summaries.items():
+        txns = txns_by_file.get(p)
+        if not txns or txns[0].balance is None:
+            continue
+        checked += 1
+        prev = s.begin_cents
+        for t in txns:
+            expected = prev + int(round(t.amount * 100))
+            got = int(round(t.balance * 100))
+            if got != expected:
+                bad.append(f"{os.path.basename(p)}: after {t.date} {t.description[:25]} "
+                           f"balance {dollars(got)} != expected {dollars(expected)}")
+                break  # one break per file is enough to flag it
+            prev = got
+    res.checks.append((not bad,
+                       f"{checked} statements: running-balance chain consistent"
+                       + ("" if not bad else " — " + "; ".join(bad[:6]))))
 
 
 def audit_cashapp(paths, transactions):
