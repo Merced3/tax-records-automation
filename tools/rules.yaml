@@ -10,36 +10,42 @@
 
 - match: chick-fil-a
   category: Meals
+  note: Food
 - match: mcdonald
   category: Meals
+  note: Food
 - match: whataburger
   category: Meals
+  note: Food
 - match: texas roadhouse
   category: Meals
+  note: Food
 - match: wingstop
   category: Meals
+  note: Food
 - match: jersey mikes
   category: Meals
+  note: Food
 - match: taco
   category: Meals
 
 - match: circle k
-  category: Fuel
+  category: Car (Fuel)
 - match: exxon
-  category: Fuel
+  category: Car (Fuel)
 - match: valero
-  category: Fuel
+  category: Car (Fuel)
 - match: shell
-  category: Fuel
+  category: Car (Fuel)
 - match: chevron
-  category: Fuel
+  category: Car (Fuel)
 
 - match: spectrum
   category: Utilities
-  note: internet
+  note: internet, Work business expense (work from home)
 - match: city public srv
   category: Utilities
-  note: CPS energy
+  note: CPS energy, Work business expense (work from home)
 
 - match: golds gym
   category: Health

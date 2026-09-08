@@ -225,6 +225,26 @@ the bank's own paper.
 
 ---
 
+---
+
+## 0013: The annotation report is a pure query, ranking is pluggable
+
+**Decision:** `report <year>` (which rows still need a human) is a pure
+function in `annotations/report.py` — no printing, no CSV knowledge, no
+front-end assumptions. Ranking is a pluggable registry (`largest`,
+`smallest`, `oldest`, `newest`, `merchant`), and scope (expenses-only vs
+all) is a parameter.
+
+**Why:** The user annotates over a long period and asked for two things that
+shape the design: (1) rank highest-to-least so big write-offs get done
+first, and (2) keep it decoupled so a future Discord bot can reuse the exact
+same query — including a future flow where the bot *suggests* a rule and the
+user approves or overrides it for special tax cases. A pure query function
+plus a thin CLI renderer gives us that seam for free. New orderings are one
+entry in `ORDERINGS`, not new logic.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and

@@ -27,6 +27,11 @@ Usage (from the repo root, with the venv active):
     python tools/main.py annotate-dry 2024
         Show what rules WOULD auto-fill for still-blank rows. Writes nothing.
         Use this to tune tools/rules.yaml before running annotate for real.
+
+    python tools/main.py report 2024 [--order largest] [--limit 20] [--all]
+        Show un-annotated rows, ranked. Default: largest expenses first
+        (what a tax pro itemizes). --all includes income; --order picks the
+        ranking (largest/smallest/oldest/newest/merchant).
 """
 
 import os
@@ -192,6 +197,28 @@ def cmd_annotate(year, config):
     print(f"\nFill in the Category and Note columns, then re-run anytime.")
 
 
+def cmd_report(year, config, order="largest", limit=20, expenses_only=True):
+    """Show the highest-priority rows still needing annotation.
+
+    The ranking logic lives in annotations/report.py (pure, reusable); this
+    is just the CLI renderer. Defaults to largest expenses first because
+    that's what a tax pro itemizes — flip with --order or --all.
+    """
+    from annotations import report as rep
+    records = os.path.join(REPO_ROOT, config["records_root"])
+    txns, _ = run_year(records, year)
+    txns = filters.apply(txns, config["include"])
+    existing = store.load_existing(os.path.join(REPO_ROOT, "annotations", f"{year}.csv"))
+
+    rows = rep.unannotated(txns, existing, order=order, limit=limit,
+                           expenses_only=expenses_only)
+    scope = "expenses" if expenses_only else "all transactions"
+    print(f"{year}: {len(rows)} un-annotated {scope} shown ({order} first)")
+    print(f"    (orders: largest, smallest, oldest, newest, merchant)\n")
+    for r in rows:
+        print(f"  {r['date']} {r['amount']:>10.2f}  {r['merchant'][:38]:<38}  [{r['source_account'][:20]}]")
+
+
 def cmd_run(config):
     for year in config["years"]:
         txns, report = run_year(os.path.join(REPO_ROOT, config["records_root"]), year)
@@ -200,6 +227,15 @@ def cmd_run(config):
                               os.path.join(REPO_ROOT, config["output_dir"]), year)
         print(f"{year}: {len(txns)} transactions -> {os.path.relpath(path, REPO_ROOT)}")
         print_report(report)
+
+
+def _flag_value(argv, name, default):
+    """Read '--name value' from argv; default if absent."""
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return default
 
 
 if __name__ == "__main__":
@@ -218,6 +254,14 @@ if __name__ == "__main__":
         cmd_annotate(int(sys.argv[2]), config)
     elif cmd == "annotate-dry" and len(sys.argv) == 3:
         cmd_annotate_dry(int(sys.argv[2]), config)
+    elif cmd == "report" and len(sys.argv) >= 3:
+        # report <year> [--order largest|smallest|oldest|newest|merchant]
+        #               [--limit N] [--all]
+        year = int(sys.argv[2])
+        order = _flag_value(sys.argv, "--order", "largest")
+        limit = int(_flag_value(sys.argv, "--limit", "20"))
+        expenses_only = "--all" not in sys.argv
+        cmd_report(year, config, order=order, limit=limit, expenses_only=expenses_only)
     elif cmd == "run":
         cmd_run(config)
     else:
