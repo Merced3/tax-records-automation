@@ -23,6 +23,10 @@ Usage (from the repo root, with the venv active):
     python tools/main.py annotate 2024
         Generate annotations/<year>.csv for you to fill in (Category, Note).
         Preserves rows you've already annotated. Re-runnable.
+
+    python tools/main.py annotate-dry 2024
+        Show what rules WOULD auto-fill for still-blank rows. Writes nothing.
+        Use this to tune tools/rules.yaml before running annotate for real.
 """
 
 import os
@@ -141,14 +145,40 @@ def cmd_audit(year, config):
         sys.exit(1)
 
 
-def cmd_annotate(year, config):
+def _rules_suggester():
     from annotations import rules
+    rule_list = rules.load_rules(os.path.join(REPO_ROOT, "tools", "rules.yaml"))
+    return (lambda t: rules.suggest(t, rule_list)) if rule_list else None
+
+
+def cmd_annotate_dry(year, config):
+    """Show what rules WOULD fill for still-blank rows. Writes nothing."""
+    records = os.path.join(REPO_ROOT, config["records_root"])
+    txns, report = run_year(records, year)
+    txns = filters.apply(txns, config["include"])
+    suggester = _rules_suggester()
+    path = os.path.join(REPO_ROOT, "annotations", f"{year}.csv")
+    rows = store.preview(txns, path, suggester)
+
+    print(f"{year}: DRY RUN — nothing written")
+    if not suggester:
+        print("  no rules found (tools/rules.yaml empty or missing)")
+        return
+    print(f"  {len(rows)} still-blank rows would be auto-filled:\n")
+    for t, sugg in rows[:40]:
+        note = f"  | {sugg.note}" if sugg.note else ""
+        print(f"    {t.date} {t.amount:>10.2f} {t.merchant[:34]:<34} -> "
+              f"{sugg.category}{note}")
+    if len(rows) > 40:
+        print(f"    ... and {len(rows) - 40} more")
+
+
+def cmd_annotate(year, config):
     records = os.path.join(REPO_ROOT, config["records_root"])
     txns, report = run_year(records, year)
     txns = filters.apply(txns, config["include"])
 
-    rule_list = rules.load_rules(os.path.join(REPO_ROOT, "tools", "rules.yaml"))
-    suggester = (lambda t: rules.suggest(t, rule_list)) if rule_list else None
+    suggester = _rules_suggester()
 
     out_dir = os.path.join(REPO_ROOT, "annotations")
     path = os.path.join(out_dir, f"{year}.csv")
@@ -186,6 +216,8 @@ if __name__ == "__main__":
         cmd_audit(int(sys.argv[2]), config)
     elif cmd == "annotate" and len(sys.argv) == 3:
         cmd_annotate(int(sys.argv[2]), config)
+    elif cmd == "annotate-dry" and len(sys.argv) == 3:
+        cmd_annotate_dry(int(sys.argv[2]), config)
     elif cmd == "run":
         cmd_run(config)
     else:

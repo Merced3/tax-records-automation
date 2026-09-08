@@ -34,6 +34,25 @@ class Annotation:
         return bool(self.category.strip() or self.note.strip())
 
 
+def preview(transactions, path, suggester):
+    """Dry-run: show what rules WOULD fill, writing nothing.
+
+    Returns a list of (transaction, suggestion) for rows that are still blank
+    AND would get a suggestion. The point: tune rules.yaml against this
+    before letting it touch your real files.
+    """
+    existing = load_existing(path)
+    out = []
+    for t in transactions:
+        prior = existing.get(t.fingerprint, Annotation())
+        if prior.filled:
+            continue  # human (or a prior run) already owns this row
+        sugg = suggester(t)
+        if sugg.filled:
+            out.append((t, sugg))
+    return out
+
+
 def load_existing(path):
     """Read prior human work: fingerprint -> Annotation. Missing file = none."""
     if not os.path.isfile(path):

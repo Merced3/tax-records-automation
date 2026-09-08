@@ -32,7 +32,24 @@ From the repo root:
 # Generate/refresh the annotation file for a year (auto-fills obvious
 # merchants from tools/rules.yaml, preserves your hand-edits).
 .venv/Scripts/python tools/main.py annotate 2023
+
+# Dry-run: preview what rules WOULD auto-fill for still-blank rows.
+# Writes nothing. Tune tools/rules.yaml against this before committing.
+.venv/Scripts/python tools/main.py annotate-dry 2023
 ```
+
+## Tuning rules safely
+
+1. Run `annotate-dry <year>` — it lists the still-blank rows a rule would
+   fill, writing nothing.
+2. Edit `tools/rules.yaml` (add/adjust a `match:` + `category:` line).
+3. Re-run `annotate-dry` to see the effect. Repeat until it looks right.
+4. Run `annotate <year>` to apply for real.
+
+Remember: rules only fill blank cells. Once a row has any value (from you or
+a prior rule run), it's yours and rules never touch it again. To re-apply
+rules fresh to a year, delete `annotations/<year>.csv` first — but that wipes
+hand-edits, so only do it before you've annotated much by hand.
 
 **Important:** always invoke via `python tools/main.py ...` (or
 `.venv/Scripts/python tools/main.py ...`). Do NOT run `tools/main.py ...`
