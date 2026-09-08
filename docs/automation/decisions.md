@@ -227,10 +227,11 @@ the bank's own paper.
 
 ---
 
-## 0013: The annotation report is a pure query, ranking is pluggable
+## 0013: The annotation work-queue is a pure query, ranking is pluggable
 
-**Decision:** `report <year>` (which rows still need a human) is a pure
-function in `annotations/report.py` — no printing, no CSV knowledge, no
+**Decision:** `need-you <year>` (rows that still need a human, ranked by
+importance) is a pure function in `annotations/report.py` — no printing, no
+CSV knowledge, no
 front-end assumptions. Ranking is a pluggable registry (`largest`,
 `smallest`, `oldest`, `newest`, `merchant`), and scope (expenses-only vs
 all) is a parameter.

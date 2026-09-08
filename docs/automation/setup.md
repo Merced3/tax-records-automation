@@ -37,11 +37,11 @@ From the repo root:
 # Writes nothing. Tune tools/rules.yaml against this before committing.
 .venv/Scripts/python tools/main.py annotate-dry 2023
 
-# Report: which rows still need you, ranked. Default = largest expenses
-# first (what the tax pro itemizes). Work these top-down.
-.venv/Scripts/python tools/main.py report 2022
-.venv/Scripts/python tools/main.py report 2022 --order smallest --limit 50
-.venv/Scripts/python tools/main.py report 2022 --all   # include income rows
+# Need-you: which rows still need you, ranked by importance. Default =
+# largest expenses first (what the tax pro itemizes). Work these top-down.
+.venv/Scripts/python tools/main.py need-you 2022
+.venv/Scripts/python tools/main.py need-you 2022 --order smallest --limit 50
+.venv/Scripts/python tools/main.py need-you 2022 --all   # include income rows
 ```
 
 ## Tuning rules safely

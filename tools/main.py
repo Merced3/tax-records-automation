@@ -28,10 +28,11 @@ Usage (from the repo root, with the venv active):
         Show what rules WOULD auto-fill for still-blank rows. Writes nothing.
         Use this to tune tools/rules.yaml before running annotate for real.
 
-    python tools/main.py report 2024 [--order largest] [--limit 20] [--all]
-        Show un-annotated rows, ranked. Default: largest expenses first
-        (what a tax pro itemizes). --all includes income; --order picks the
-        ranking (largest/smallest/oldest/newest/merchant).
+    python tools/main.py need-you 2024 [--order largest] [--limit 20] [--all]
+        Show the rows that still need you, ranked by importance. Default:
+        largest expenses first (what a tax pro itemizes). --all includes
+        income; --order picks the ranking (largest/smallest/oldest/newest/
+        merchant).
 """
 
 import os
@@ -197,8 +198,8 @@ def cmd_annotate(year, config):
     print(f"\nFill in the Category and Note columns, then re-run anytime.")
 
 
-def cmd_report(year, config, order="largest", limit=20, expenses_only=True):
-    """Show the highest-priority rows still needing annotation.
+def cmd_need_you(year, config, order="largest", limit=20, expenses_only=True):
+    """Show the rows that still need you, ranked by importance.
 
     The ranking logic lives in annotations/report.py (pure, reusable); this
     is just the CLI renderer. Defaults to largest expenses first because
@@ -254,14 +255,14 @@ if __name__ == "__main__":
         cmd_annotate(int(sys.argv[2]), config)
     elif cmd == "annotate-dry" and len(sys.argv) == 3:
         cmd_annotate_dry(int(sys.argv[2]), config)
-    elif cmd == "report" and len(sys.argv) >= 3:
-        # report <year> [--order largest|smallest|oldest|newest|merchant]
-        #               [--limit N] [--all]
+    elif cmd == "need-you" and len(sys.argv) >= 3:
+        # need-you <year> [--order largest|smallest|oldest|newest|merchant]
+        #                 [--limit N] [--all]
         year = int(sys.argv[2])
         order = _flag_value(sys.argv, "--order", "largest")
         limit = int(_flag_value(sys.argv, "--limit", "20"))
         expenses_only = "--all" not in sys.argv
-        cmd_report(year, config, order=order, limit=limit, expenses_only=expenses_only)
+        cmd_need_you(year, config, order=order, limit=limit, expenses_only=expenses_only)
     elif cmd == "run":
         cmd_run(config)
     else:
