@@ -62,6 +62,14 @@ class ChaseStatement:
     path: str
     start: datetime
     end: datetime
+    begin_cents: int = 0
+    end_cents: int = 0
+
+
+def _signed_cents(m):
+    """m has (sign_group, digits_group); Chase prints -$12.00 / $12.00."""
+    v = cents(m.group(2))
+    return -v if m.group(1) == "-" else v
 
 
 def read_chase_summary(path):
@@ -71,12 +79,16 @@ def read_chase_summary(path):
     if not per:
         raise ValueError("no statement period found")
     sm, sd, sy, em, ed, ey = per.groups()
-    if not (CHASE_BEGIN_RE.search(text) and CHASE_END_RE.search(text)):
+    begin = CHASE_BEGIN_RE.search(text)
+    end = CHASE_END_RE.search(text)
+    if not (begin and end):
         raise ValueError("no balance summary found")
     return ChaseStatement(
         path=path,
         start=datetime(int(sy), _MONTH_NUM[sm], int(sd)),
         end=datetime(int(ey), _MONTH_NUM[em], int(ed)),
+        begin_cents=_signed_cents(begin),
+        end_cents=_signed_cents(end),
     )
 
 
@@ -124,13 +136,21 @@ def _account_of(path):
     return os.path.basename(os.path.dirname(path))
 
 
-def audit_chase(paths):
-    """Per-account statement chaining. Returns AuditResult."""
+def audit_chase(paths, txns_by_file=None):
+    """Two proofs per year: (1) statements chain consecutively per account;
+    (2) each statement's parsed transactions sum to its own balance delta.
+
+    txns_by_file maps pdf path -> list of Transaction for that file (needed
+    for check 2). Check 2 is what catches silently dropped/fused
+    transactions — the failure mode that chaining alone missed."""
     res = AuditResult("Chase")
     by_account = {}
+    summaries = {}
     for p in paths:
         try:
-            by_account.setdefault(_account_of(p), []).append(read_chase_summary(p))
+            s = read_chase_summary(p)
+            by_account.setdefault(_account_of(p), []).append(s)
+            summaries[p] = s
         except Exception as e:
             res.checks.append((False, f"summary unreadable: "
                                       f"{_account_of(p)}/{os.path.basename(p)}: {e}"))
@@ -147,6 +167,26 @@ def audit_chase(paths):
         res.checks.append((not problems,
                            f"{account}: {len(stmts)} statements chain consecutively"
                            + ("" if not problems else " — " + "; ".join(problems))))
+
+    # Per-statement dollar reconciliation: sum(parsed) == ending - beginning.
+    if txns_by_file is not None:
+        mismatches = []
+        checked = 0
+        for p, s in summaries.items():
+            txns = txns_by_file.get(p)
+            if txns is None:
+                continue
+            checked += 1
+            got = int(round(sum(t.amount for t in txns) * 100))
+            expected = s.end_cents - s.begin_cents
+            if got != expected:
+                mismatches.append(
+                    f"{os.path.basename(p)}: sum {dollars(got)} "
+                    f"!= delta {dollars(expected)} (off {dollars(got - expected)})")
+        res.checks.append((not mismatches,
+                           f"{checked} statements: parsed sums == balance deltas"
+                           + ("" if not mismatches
+                              else " — " + "; ".join(mismatches))))
     return res
 
 

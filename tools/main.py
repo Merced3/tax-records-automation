@@ -117,9 +117,15 @@ def cmd_audit(year, config):
             p = os.path.join(dirpath, f)
             (cashapp_paths if "CashApp" in dirpath else chase_paths).append(p)
 
+    # Map each Chase PDF to the transactions parsed from it, for the
+    # per-statement dollar reconciliation.
+    chase_txns_by_file = {}
+    for t in chase_txns:
+        chase_txns_by_file.setdefault(t.source_file, []).append(t)
+
     results = []
     if chase_paths:
-        results.append(reconcile.audit_chase(chase_paths))
+        results.append(reconcile.audit_chase(chase_paths, chase_txns_by_file))
     if cashapp_paths:
         results.append(reconcile.audit_cashapp(cashapp_paths, cashapp_txns))
 

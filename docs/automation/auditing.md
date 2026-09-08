@@ -47,10 +47,12 @@ Open that PDF, Ctrl+F the amount. If it matches, that row is provably real.
 Each statement prints its own summary, so we can *prove* extraction rather
 than eyeball it:
 
-- **Chase** — per account, the year's statements must chain into consecutive
-  periods. An overlap means a duplicated statement file (this is how we
-  caught a misnamed duplicate `Jun-10.pdf` in 2024); a gap means a missing
-  statement.
+- **Chase** — two proofs. (1) Per account, statements chain into
+  consecutive periods (catches duplicate/missing statement files).
+  (2) **Each statement's parsed transaction sum must equal its own printed
+  balance delta, to the cent.** This is the check that catches silently
+  dropped or fused transactions — see decision 0009 for the bugs it was
+  added to prevent. Dates prove structure; only dollars prove extraction.
 - **Cash App** — the year's extracted Money In and Money Out must equal the
   statements' own printed totals, after excluding payments funded directly
   from the linked bank (which never touch the Cash App balance and are

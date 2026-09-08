@@ -119,6 +119,38 @@ it contains financial judgments about real transactions.
 
 ---
 
+---
+
+## 0009: Dollar reconciliation per statement; dedupe only across files
+
+**Decision:** The Chase audit must reconcile *dollars*, not just statement
+chaining: each statement's parsed transaction sum must equal its own printed
+balance delta. And dedupe must only remove a charge when it appears in TWO
+different statements (overlap) — never collapse identical charges within one
+statement.
+
+**Why (this was earned, not theorized):** A user spot-check found missing
+transactions, which exposed THREE compounding bugs the date-chaining audit
+had silently allowed — 868 missing transactions (18% of all data):
+
+1. **Marker-format bug:** newer statements use `*start*transactiondetail`
+   (no spaces) vs the old spaced form → whole files read as 0 transactions
+   while reporting "parsed successfully."
+2. **Page-boundary fusion:** at page breaks, the text layer fuses the
+   `*end*` marker + footer + the page's last transaction into one mangled
+   line (`*end*transac1tion detail0/31 Zelle Payment...`), silently dropping
+   that transaction and corrupting its date. 53 such lines across 33 files.
+3. **Dedupe false-positives:** identical same-statement charges (a
+   double-billed gym membership) share a fingerprint and were being dropped
+   as "duplicates." Investigating revealed statements never actually overlap
+   in content — every prior "duplicates removed" count was this bug.
+
+The lesson baked into the audit: **chaining/dates prove structure, only
+dollars prove extraction.** Any future parser change must keep the
+balance-delta check green.
+
+---
+
 ## Known technical debt (accepted, not forgotten)
 
 - **Year stamping.** Transaction dates come from MM/DD on the statement and
