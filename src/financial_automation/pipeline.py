@@ -22,16 +22,47 @@ def discover(records_root, year):
                   key=lambda p: str(p).lower()) if root.exists() else []
 
 
-def run_year(records_root, year, parsers=None):
+def run_year(records_root, year, parsers=None, ignored_sources=None):
     parsers = parsers or PARSERS
+    ignored_sources = ignored_sources or []
     report = PipelineReport()
     for path in discover(records_root, year):
+        normalized = str(path).replace("\\", "/")
+        declared = next((i for i in ignored_sources
+                         if i["match"] in normalized), None)
+        if declared is not None:
+            report.ignored_files.append({"path": str(path),
+                                         "reason": declared["reason"]})
+            continue
         suffix = path.suffix.lower()
         if suffix not in SUPPORTED_EXTENSIONS:
-            report.ignored_files.append({
-                "path": str(path),
-                "reason": INTENTIONALLY_IGNORED.get(suffix, "unsupported file type"),
-            })
+            # Structured sources (CSV) are offered to plugins too; only files
+            # no plugin claims fall back to the explicit-ignore policy.
+            if suffix == ".csv":
+                try:
+                    text = path.read_text(encoding="utf-8-sig", errors="replace")
+                except Exception as exc:
+                    report.errors.append({"path": str(path), "error": str(exc)})
+                    continue
+                parser = next((p for p in parsers if p.can_parse(text, str(path))), None)
+                if parser is not None:
+                    try:
+                        account = path.parent.name
+                        report.statements.append(parser.parse(str(path), account, int(year)))
+                    except Exception as exc:
+                        report.errors.append({"path": str(path), "error": str(exc)})
+                    continue
+                else:
+                    report.ignored_files.append({
+                        "path": str(path),
+                        "reason": INTENTIONALLY_IGNORED.get(suffix, "unsupported file type"),
+                    })
+                    continue
+            else:
+                report.ignored_files.append({
+                    "path": str(path),
+                    "reason": INTENTIONALLY_IGNORED.get(suffix, "unsupported file type"),
+                })
             continue
         try:
             with pdfplumber.open(path) as pdf:

@@ -46,7 +46,8 @@ def main(argv=None, repo_root=None):
 
 
 def _load(root, cfg, year):
-    pipeline_report = run_year(root / cfg["records_root"], year)
+    pipeline_report = run_year(root / cfg["records_root"], year,
+                               ignored_sources=cfg.get("ignored_sources"))
     rows = transactions(pipeline_report, cfg.get("include", "all"))
     return pipeline_report, rows
 

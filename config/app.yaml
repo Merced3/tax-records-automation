@@ -3,6 +3,9 @@ years: [2022, 2023, 2024, 2025]
 include: all
 rules_path: config/rules.yaml
 
+# Explicitly declared non-parsed sources. `match` is a path substring.
+ignored_sources: []
+
 tax_professional:
   # The fourth spreadsheet column is the human explanation/business purpose.
   # Change to `raw` if the professional confirms he wants the bank's raw text.

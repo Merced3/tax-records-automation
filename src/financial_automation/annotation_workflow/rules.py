@@ -50,13 +50,27 @@ def suggest(transaction, rules):
         if accounts and transaction.account not in accounts:
             continue
         match = rule.get("match", {})
-        needle = match.get("contains") if isinstance(match, dict) else match
-        if not needle or str(needle).lower() not in haystack:
-            continue
+        groups = ()
+        if isinstance(match, dict) and match.get("regex"):
+            found = re.search(str(match["regex"]), haystack)
+            if not found:
+                continue
+            groups = found.groups()
+        else:
+            needle = match.get("contains") if isinstance(match, dict) else match
+            if not needle or str(needle).lower() not in haystack:
+                continue
         proposed = rule.get("suggest", {})
         # Backward-compatible old shape while private rules migrate.
         category = proposed.get("category", rule.get("category", ""))
         note = proposed.get("note", rule.get("note", ""))
-        return Suggestion(str(category or ""), str(note or ""),
+        return Suggestion(str(category or ""), _fill(str(note or ""), groups),
                           str(rule["id"]), str(rule["version"]))
     return Suggestion()
+
+
+def _fill(note, groups):
+    """Substitute {1}..{9} with regex capture groups; unknown tokens stay."""
+    for index, value in enumerate(groups, 1):
+        note = note.replace("{" + str(index) + "}", value or "")
+    return note

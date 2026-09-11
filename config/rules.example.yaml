@@ -21,3 +21,14 @@ rules:
     suggest:
       category: Software
       note: Needs business-purpose review
+
+  # Regex matching is also supported. The pattern runs against lowercased
+  # merchant + raw bank text, and note tokens {1}..{9} are filled with the
+  # regex capture groups (useful for transfer directions/account endings).
+  - id: transfer.example
+    version: 1
+    match:
+      regex: 'online transfer to chk \.{3}(\d+)'
+    suggest:
+      category: Bank Transfer
+      note: Transferred money OUT INTO own account ending {1}

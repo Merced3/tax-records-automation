@@ -1,5 +1,7 @@
 """Independent reconciliation checks against statement summaries."""
 
+import csv
+import io
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -65,11 +67,17 @@ def audit(year, pipeline_report):
                f"{len(pipeline_report.ignored_files)} explicitly ignored")
 
     chase = [s for s in pipeline_report.statements if s.parser_name == "chase"]
+    credit = [s for s in pipeline_report.statements if s.parser_name == "chase-credit"]
     cashapp = [s for s in pipeline_report.statements if s.parser_name == "cashapp"]
     if chase:
         _audit_chase(result, chase)
+    if credit:
+        _audit_chase_credit(result, credit)
     if cashapp:
         _audit_cashapp(result, cashapp)
+    venmo = [s for s in pipeline_report.statements if s.parser_name == "venmo"]
+    if venmo:
+        _audit_venmo(result, venmo)
     return result
 
 
@@ -118,6 +126,78 @@ def _audit_chase(result, statements):
                "all dates inside periods" if not date_bad else "; ".join(date_bad[:8]))
     result.add("Chase running balances", not chain_bad,
                "every row chains" if not chain_bad else "; ".join(chain_bad[:8]))
+
+
+def _audit_venmo(result, statements):
+    """Venmo CSV exports carry no printed totals, so the independent check is
+    row completeness: re-scan the file for completed transaction IDs and
+    compare with what the parser claims, plus dates in the file's own span."""
+    count_bad, date_bad = [], []
+    for statement in statements:
+        with open(statement.path, encoding="utf-8-sig", errors="replace") as f:
+            rows = list(csv.reader(io.StringIO(f.read())))
+        complete = sum(1 for r in rows
+                       if len(r) > 8 and r[1].strip().isdigit()
+                       and r[4].strip() == "Complete")
+        if complete != len(statement.transactions):
+            count_bad.append(f"{Path(statement.path).name}: parsed {len(statement.transactions)}/{complete}")
+        for txn in statement.transactions:
+            if not (statement.period_start <= txn.date <= statement.period_end):
+                date_bad.append(f"{Path(statement.path).name}: {txn.date}")
+    result.add("Venmo row completeness", not count_bad,
+               f"{len(statements)} files reconcile" if not count_bad else "; ".join(count_bad[:8]))
+    result.add("Venmo transaction dates", not date_bad,
+               "all dates inside file spans" if not date_bad else "; ".join(date_bad[:8]))
+
+
+def _audit_chase_credit(result, statements):
+    labels = ["Previous Balance", "Payment, Credits", "Purchases", "Cash Advances",
+              "Balance Transfers", "Fees Charged", "Interest Charged", "New Balance"]
+    sum_bad, date_bad, seq_bad = [], [], []
+    by_account = defaultdict(list)
+    for statement in statements:
+        by_account[statement.account].append(statement)
+    for account, rows in by_account.items():
+        rows.sort(key=lambda s: s.period_start)
+        for left, right in zip(rows, rows[1:]):
+            if (left.period_end - right.period_start).days > 0:
+                seq_bad.append(f"{account}: {Path(left.path).name}/{Path(right.path).name}")
+    for statement in statements:
+        text = "\n".join(_pages(statement.path, 2)).replace("`", "")
+        values = {}
+        for label in labels:
+            found = re.search(rf"{label}\s+([+-]?)\$([\d,]+\.\d{{2}})", text)
+            if not found:
+                sum_bad.append(f"{Path(statement.path).name}: '{label}' unreadable")
+                values = None
+                break
+            sign = Decimal("-1") if found.group(1) == "-" else Decimal("1")
+            values[label] = sign * money(found.group(2))
+        if values is None:
+            continue
+        coupons = values["Purchases"] + values["Cash Advances"] + values["Balance Transfers"] + \
+                  values["Fees Charged"] + values["Interest Charged"]
+        rows = statement.transactions
+        if (values["Previous Balance"] + values["Payment, Credits"] + coupons
+                != values["New Balance"]):
+            sum_bad.append(f"{Path(statement.path).name}: summary identity broken")
+            continue
+        parsed_credit = sum((t.amount for t in rows if t.amount > 0), Decimal("0.00"))
+        parsed_debit = sum((-t.amount for t in rows if t.amount < 0), Decimal("0.00"))
+        if parsed_credit != -values["Payment, Credits"] or parsed_debit != coupons:
+            sum_bad.append(f"{Path(statement.path).name}: {parsed_credit}/{-values['Payment, Credits']}, {parsed_debit}/{coupons}")
+        for txn in rows:
+            # Chase lists transactions posted a few days before the printed
+            # opening date (posting lag vs. cycle boundary).
+            if not (statement.period_start - timedelta(days=3) <= txn.date
+                    <= statement.period_end):
+                date_bad.append(f"{Path(statement.path).name}: {txn.date}")
+    result.add("Chase credit summary identity",
+               not seq_bad and not sum_bad,
+               f"{len(statements)} statements reconcile" if not seq_bad and not sum_bad else
+               "; ".join((seq_bad + sum_bad)[:8]))
+    result.add("Chase credit transaction dates", not date_bad,
+               "all dates inside periods" if not date_bad else "; ".join(date_bad[:8]))
 
 
 def _audit_cashapp(result, statements):

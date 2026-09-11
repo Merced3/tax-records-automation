@@ -141,6 +141,18 @@ class IdentityAndSafetyRegressions(unittest.TestCase):
         txn.date = date(2025,1,2)
         self.assertFalse(suggest(txn, rules).present)
 
+    def test_regex_rule_fills_note_template(self):
+        txn = self.txn()
+        txn.raw_description = "Online Transfer To Chk ...2571 Transaction#: 14850477063"
+        txn.merchant = txn.raw_description
+        rules = [{"id":"t", "version":2,
+                  "match":{"regex": r"online transfer to chk \.{3}(\d+)"},
+                  "suggest":{"category":"Bank Transfer",
+                             "note":"Transferred INTO own account ending {1}"}}]
+        got = suggest(txn, rules)
+        self.assertEqual("Bank Transfer", got.category)
+        self.assertEqual("Transferred INTO own account ending 2571", got.note)
+
     def test_annotation_write_backs_up_and_preserves_human_text(self):
         with TemporaryDirectory() as temp:
             root = Path(temp); path = root / "annotations" / "2024.csv"
@@ -178,6 +190,70 @@ class IdentityAndSafetyRegressions(unittest.TestCase):
             (folder / "notes.txt").write_text("note", encoding="utf-8")
             self.assertEqual(["Jan.csv", "notes.txt"],
                              [p.name for p in discover(temp, 2024)])
+
+
+    def test_declared_ignored_source_gets_disposition(self):
+        from financial_automation.pipeline import run_year
+        with TemporaryDirectory() as temp:
+            folder = Path(temp) / "2024" / "Bank Statements" / "Chase" / "Credit Card"
+            folder.mkdir(parents=True)
+            (folder / "statement.pdf").write_bytes(b"%PDF-1.4 fake")
+            report = run_year(temp, 2024, ignored_sources=[
+                {"match": "Chase/Credit Card/", "reason": "parser not built yet"}])
+            self.assertEqual([], report.unclaimed_files)
+            self.assertEqual(1, len(report.ignored_files))
+            self.assertEqual("parser not built yet", report.ignored_files[0]["reason"])
+
+
+CC_PAGE1 = """Marketing text
+AACCCCOOUUNNTT SSUUMMMMAARRYY
+Previous Balance $100.00
+Payment, Credits -$50.00
+Purchases +$30.68
+Cash Advances $0.00
+Balance Transfers $0.00
+Fees Charged $0.00
+Interest Charged $0.00
+New Balance $80.68
+Opening/Closing Date 11/27/23 - 12/26/23
+"""
+CC_PAGE3 = """header
+AACCCCOOUUNNTT AACCTTIIVVIITTYY
+Date of
+Transaction Merchant Name or Transaction Description $ Amount
+PAYMENTS AND OTHER CREDITS
+12/05 Payment Thank You-Mobile -50.00
+PURCHASE
+11/26 SHELL OIL12979894016 SAN ANTONIO TX 30.00
+12/01 EXXON TRIPLE S. EXPRES SAN ANTONIO TX .68
+2023 Totals Year-to-Date
+Total fees charged in 2023 $0.00
+"""
+
+
+class ChaseCreditParserRegressions(unittest.TestCase):
+    def parse(self, pages):
+        from financial_automation.ingestion.chase_credit import ChaseCreditParser
+        return ChaseCreditParser().parse_pages(pages, "synthetic.pdf", "Credit Card", 2023)
+
+    def test_signs_and_sub_dollar_amounts(self):
+        statement = self.parse([CC_PAGE1, "", CC_PAGE3])
+        txns = statement.transactions
+        self.assertEqual(3, len(txns))
+        payment = next(t for t in txns if "Payment" in t.merchant)
+        fuel = next(t for t in txns if "SHELL" in t.merchant)
+        sub_dollar = next(t for t in txns if "TRIPLE" in t.merchant)
+        self.assertEqual(Decimal("50.00"), payment.amount)   # credits become positive
+        self.assertEqual(Decimal("-30.00"), fuel.amount)     # purchases become negative
+        self.assertEqual(Decimal("-0.68"), sub_dollar.amount)  # '.68' amounts parse
+        self.assertEqual(date(2023, 11, 26), fuel.date)
+        self.assertEqual(date(2023, 12, 5), payment.date)
+
+    def test_cc_rows_get_unique_ids(self):
+        statement = self.parse([CC_PAGE1, "", CC_PAGE3.replace("11/26 SHELL OIL12979894016 SAN ANTONIO TX 30.00",
+                                                                "11/26 SHELL X TX 5.00\n11/26 SHELL X TX 5.00")])
+        ids = [t.transaction_id for t in statement.transactions]
+        self.assertEqual(len(ids), len(set(ids)))
 
 
 if __name__ == "__main__":
