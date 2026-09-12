@@ -87,7 +87,8 @@ def atomic_write_json(path, value, repo_root=None, backup_reason="rewrite"):
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
-        json.load(open(tmp_name, encoding="utf-8"))
+        with open(tmp_name, encoding="utf-8") as f:
+            json.load(f)     # validate before replacing the good file
         os.replace(tmp_name, path)
     finally:
         if os.path.exists(tmp_name):

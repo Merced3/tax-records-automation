@@ -13,14 +13,24 @@ human's judgment.
 
 ```text
 records (official evidence)
-  -> ingestion plugins (Chase PDF, Cash App PDF)
-  -> independent audit checks
+  -> ingestion plugins (Chase PDF, Chase credit PDF, Cash App PDF, Venmo CSV)
+  -> independent audit checks (arithmetic) + coverage (which days exist)
   -> canonical transactions with unique IDs and source locations
   -> annotations (suggestions separate from human decisions)
+  -> field-level resolution: human overrides, then owner-approved rules
   -> output/raw + output/tax-professional-draft + manifests
-  -> output/final only after every row is human-reviewed
-  -> Google Sheets later, initially read-only/diff-only
+  -> output/calendar-year: same rows regrouped by transaction date
+  -> output/final only after every row resolves Category AND Note
+  -> Google Sheets later, initially read-only/diff-only (no writes today)
 ```
+
+## Two views, one set of facts
+
+Statement view is the unit of reconciliation and is never rearranged.
+Calendar-year view is derived from audited statement years by transaction date,
+because statement cycles cross year boundaries. Deriving the second never edits
+sources or moves annotation rows. `tools/reconcile_exports.py <year>` proves the
+regrouping conserves every row and every amount.
 
 ## Current guarantees
 
@@ -44,6 +54,12 @@ records (official evidence)
   overwriting Category, Tax Treatment, or Note.
 - Generated output includes a raw CSV and a manifest containing source hashes,
   parser identities, audit results, row count, Git commit, and output hashes.
+- Manifests additionally hash the code, config, private rules, rule approvals,
+  and annotation files that actually ran, and record whether the working tree
+  was dirty. A dirty tree is reported as not reproducible from its commit.
+- A deliverable row needs BOTH Category and Note, sourced from a human
+  override or an owner-approved rule. Unapproved suggestions are never
+  exported as values, and rule text is never relabeled as human-typed.
 
 ## What is not claimed
 

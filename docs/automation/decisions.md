@@ -55,7 +55,8 @@ unclaimed structured files are reported as explicit ignores, not skipped.
 
 Rules write Suggested Category/Note plus Rule ID/Version. Humans write Category,
 Tax Treatment, and Note. Rules can be refreshed as often as needed and never
-overwrite human fields. Suggestions remain in `need-you` until reviewed.
+overwrite human fields. Suggestions remain in `need-you` until decided — either
+by a human field or by owner approval of the rule (ADR 0016).
 
 Legacy 2022 data was migrated conservatively: existing non-rule text became
 human state; other years were regenerated because the user confirmed only 2022
@@ -80,12 +81,52 @@ records them in an append-only journal.
 This pattern also governs future network ingestion: stage, validate, hash,
 journal, then commit. Wi-Fi loss must preserve the last accepted state.
 
+## 0016 — An approved rule is a human decision; fields resolve individually
+
+The owner decides at two levels: a row-specific field, or a rule for recurring
+transactions. Requiring a row-level keystroke for every occurrence of an
+already-decided recurring merchant is redundant, so approval is recorded per
+rule and version in `annotations/rule-approvals.yaml`, written only by
+`approve-rule`.
+
+Approval is version-specific: bumping a rule's version makes its approval
+stale, because the rule's meaning changed. Approval is also year-scopeable, and
+a year the owner never approved is *unapproved*, not stale.
+
+Category and Note resolve independently so a handwritten note can coexist with
+a rule-supplied category. Precedence is human override, then (future) eligible
+context evidence, then approved rule. Provenance per field is preserved and
+reported; rule-generated text is never presented as human-typed text. An
+unapproved suggestion is never exported as a value.
+
+A deliverable row requires BOTH Category and Note. Tax Treatment is optional
+and primarily the professional's responsibility.
+
+## 0017 — Calendar-year exports are derived, never destructive
+
+Statement organisation is preserved because statements are the unit of
+reconciliation. A tax year is a different grouping of the same accepted rows,
+selected by transaction date, so a January statement supplies prior-December
+activity. The derived export is assembled only after every contributing
+statement year passes its audit, refuses duplicate Transaction IDs, and never
+edits records or moves annotation rows. `tools/reconcile_exports.py` proves row
+and amount conservation between the two views.
+
+## 0018 — A manifest must describe the state that actually ran
+
+Recording only source hashes and a commit is misleading when the working tree
+is dirty: the commit does not describe the code that ran. Manifests therefore
+hash the code, config, private rules, rule approvals, and annotations actually
+used, record per-field decision sources, coverage, and approvals, and mark
+dirty trees `reproducible_from_commit: false`.
+
 ## 0010 — Output has raw, draft, final, and manifest layers
 
 `output/raw` preserves all available source-level fields and provenance.
 `output/tax-professional-draft` maps canonical transactions and annotations to
-the professional's four columns. `output/final` is blocked until every row is
-human-reviewed and the audit passes. A manifest hashes sources/outputs and
+the professional's four columns. `output/calendar-year` holds the derived
+tax-year view (ADR 0017). `output/final` is blocked until every row resolves
+both Category and Note, the audit passes, and coverage is complete. A manifest hashes sources/outputs and
 records audit results, parser identity, row counts, ignored files, and Git
 commit.
 

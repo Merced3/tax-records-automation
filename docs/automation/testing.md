@@ -44,6 +44,17 @@ asserts that a *wrong* outcome is caught, not that a happy path works:
 - a January statement covers prior-December days
 - declared known-missing history keeps the year incomplete
 - a derived (unprinted) period reports "unmeasurable", never fabricated gaps
+- a human override beats an approved rule, and a handwritten note coexists with
+  a rule-supplied category
+- an unapproved suggestion is not a decision and never reaches the export
+- a version bump makes an approval stale; an unapproved year is not "stale"
+- a category without a note is not deliverable; Tax Treatment stays optional
+- approving a rule empties the row queue it covers (no redundant approvals)
+- a prior-December row on a January statement lands in the correct tax year
+- the same transaction appearing in two statement years is refused
+- a dirty working tree is recorded as not reproducible from its commit
+- changed code changes the manifest's code hash
+- `final` refuses on unresolved rows, incomplete coverage, or missing resolution
 
 A failure test is only trusted after the fix is temporarily reverted and the
 test is observed to fail. Tests that cannot fail prove nothing.

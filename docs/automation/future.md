@@ -11,7 +11,8 @@ Build in stages:
 5. Re-read and compare every written row.
 6. Keep writing disabled until explicitly approved.
 
-Google Sheets is an output, not the annotation database.
+Google Sheets is an output, not the annotation database. No Sheets writes exist
+today, and none should be added while the professional export is stabilising.
 
 ## Bank ingestion APIs
 
@@ -20,6 +21,16 @@ projects. Plaid or similar aggregators can provide structured transactions for
 future years, but official PDFs remain tax evidence. API data becomes another
 ingestion plugin and must use staged, resumable, atomic acceptance described in
 `recovery.md`.
+
+## Timeline / context evidence
+
+A generic retrieval service may later supply normalized evidence events that
+help explain specific transactions. It is independent of Discord, independent of
+this project, and gated on an evidence-eligibility policy: context can outrank
+an approved generic rule only when it meets defined matching criteria, and never
+outranks a human override. See `context-evidence.md` for the contract. Nothing
+of this is implemented, and no LLM inference participates in the current
+deliverable.
 
 ## Discord or another interface
 

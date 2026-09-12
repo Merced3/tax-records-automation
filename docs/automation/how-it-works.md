@@ -77,14 +77,43 @@ backups/<snapshot>` proves afterwards that every human-typed value survived.
 A private baseline lets the next run detect Category/Tax Treatment/Note edits
 made in Excel or VS Code and append those changes to `backups/journal.jsonl`.
 
-## 6. Output has layers
+## 6. Decisions resolve field by field
+
+A row's Category and Note resolve independently, in this precedence:
+
+1. A transaction-specific human field (always wins; nothing overwrites it).
+2. *(future)* eligible context/timeline evidence — see `context-evidence.md`.
+3. An owner-approved rule, at the exact version approved.
+
+So a handwritten Note can coexist with a rule-supplied Category, and each
+value's origin is recorded rather than relabeled as human-typed text.
+
+A suggestion is not a decision. Approval happens per rule, not per row:
+
+```powershell
+python run.py approvals 2024        # rules ranked by rows they would resolve
+python run.py approve-rule 2024 merchant.example
+python run.py resolve 2024          # what is deliverable, and what blocks it
+```
+
+Approvals live in `annotations/rule-approvals.yaml` and are version-specific:
+bumping a rule's version marks its approval stale, because the meaning changed.
+Approving a recurring rule settles all its rows without retyping them, which is
+why `need-you` no longer lists rows an approved rule already decides.
+
+## 7. Output has layers
 
 - `output/raw/<year>.csv`: all available source-level fields and provenance.
 - `output/tax-professional-draft/<year>.csv`: exactly four configured columns.
-- `output/final/<year>.csv`: refused until all rows are human-reviewed and the
-  audit passes.
-- A manifest beside each professional output hashes both source files and
-  generated files, records the audit, ignored sources, row count, and Git commit.
+- `output/calendar-year/<year>.csv` and `output/calendar-year-raw/<year>.csv`:
+  the same accepted rows regrouped by actual transaction date, assembled only
+  after every contributing statement year passes its audit.
+- `output/final/<year>.csv`: refused unless every row resolves Category AND
+  Note, the audit passes, and coverage is complete.
+- A manifest beside each output hashes source files, generated files, the code
+  and config that ran, the private rules, the rule approvals, and the
+  annotation file; it records the audit, coverage, decision sources, ignored
+  sources, row counts, Git commit, and whether the tree was dirty.
 
 `annotations/` is not inside `output/` because it contains irreplaceable human
 state. Everything in `output/` is safe to rebuild.

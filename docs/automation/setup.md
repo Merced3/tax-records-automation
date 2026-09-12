@@ -39,6 +39,16 @@ python run.py coverage 2022
 # and rows neither a rule nor a human decides. Non-zero exit if unclean.
 python run.py rules-lint 2022
 
+# Rules awaiting owner approval, ranked by how many rows each would resolve
+python run.py approvals 2022
+
+# Record the owner's decision for a recurring rule (this year, or all years)
+python run.py approve-rule 2022 merchant.example
+python run.py approve-rule 2022 merchant.example --all-years
+
+# Field-level resolution status: what is deliverable and what blocks the rest
+python run.py resolve 2022
+
 # Human work queue; suggestions remain visible for approval/override
 python run.py need-you 2022
 python run.py need-you 2022 --order smallest --limit 50
@@ -48,7 +58,16 @@ python run.py need-you 2022 --order merchant --all
 python run.py build 2022
 python run.py build       # every configured year
 
-# Refuses unless every row is human-reviewed and audit passes
+# Derived tax-year view by transaction date; audits every contributing
+# statement year first and leaves records/annotations untouched
+python run.py calendar-year 2022
+python run.py calendar-year 2022 --final
+
+# Prove the regrouping lost, gained, or duplicated nothing
+python tools/reconcile_exports.py 2022
+
+# Refuses unless every row resolves Category AND Note, audit passes,
+# and statement coverage is complete
 python run.py final 2022
 
 # Necessary public regression tests
@@ -64,11 +83,16 @@ Do not edit machine columns, Suggested columns, Rule ID, or Rule Version.
 Edit only:
 
 - `Category`: what the purchase generally is
-- `Tax Treatment`: business, personal, mixed, transfer, income, uncertain, etc.
+- `Tax Treatment`: optional; business, personal, mixed, transfer, income,
+  uncertain. Primarily the professional's responsibility.
 - `Note`: transaction-specific explanation/business purpose
 
-A suggestion is not approval. `need-you` continues to show suggested rows until
-a human-owned field is filled.
+A deliverable row requires BOTH `Category` and `Note`.
+
+A suggestion is not approval. A row leaves `need-you` when a human field
+decides it **or** when the owner approves the rule that covers it — recurring
+decisions are made once per rule, not once per row. Row-level human text always
+outranks any rule.
 
 ## Changing rules safely
 

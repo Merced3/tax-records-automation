@@ -32,6 +32,26 @@ read it back to validate headers/row count, then atomically replace the current
 file. A crash may leave a harmless temporary file but should not truncate the
 last good file.
 
+## Migrations
+
+An identity or schema migration can change Transaction IDs for unchanged source
+rows, which risks orphaning irreplaceable human text. Required order:
+
+1. Snapshot `annotations/` to `backups/<name>/` before running anything.
+2. Run `annotate` for every year; the safety stop aborts (leaving files
+   byte-identical) if any human-annotated row cannot be matched.
+3. Prove preservation, do not assume it:
+
+   ```powershell
+   python tools/verify_human_preservation.py backups/<snapshot-dir>
+   ```
+
+   It compares human text by financial content rather than by ID, and reports
+   both lost and unexpectedly gained values.
+
+Never test deletion or migration behaviour against live human annotations; use
+synthetic rows in a temporary directory.
+
 ## Recovery procedure
 
 1. Stop running commands.
