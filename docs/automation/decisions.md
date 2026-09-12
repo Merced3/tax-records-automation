@@ -48,8 +48,8 @@ Output and annotation rewrites are refused when real-record audits fail.
 ## 0006 — Every discovered source receives a disposition
 
 A file is parsed, unclaimed, errored, or explicitly ignored with a reason.
-Non-PDF files such as Venmo CSV exports cannot remain invisible merely because
-that source plugin is not implemented yet.
+Non-PDF files cannot remain invisible merely because no plugin claims them;
+unclaimed structured files are reported as explicit ignores, not skipped.
 
 ## 0007 — Human decisions and rule suggestions use separate columns
 
@@ -112,6 +112,8 @@ new private operational data should enter commits.
 - Merchant cleanup is best-effort and human-reviewed.
 - PDF parser and audit both depend on PDF text extraction; independent statement
   arithmetic and synthetic regressions reduce but cannot make that risk zero.
-- Venmo CSV ingestion is intentionally deferred and explicitly reported.
+- Venmo monthly CSV exports are ingested by a dedicated plugin (since
+  2026-09); its audit is row-completeness + date-span because the exports
+  carry no printed totals.
 - A network bank-data source, Discord interface, and Google Sheets integration
   are future adapters, not core logic.

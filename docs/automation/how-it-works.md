@@ -4,8 +4,9 @@
 
 The pipeline scans `records/<year>/Bank Statements/`. PDFs are offered to
 registered ingestion plugins. Other files are not invisible: they appear as
-explicit ignores with a reason. Today, Venmo CSV files are reported as a
-structured source that is not enabled yet.
+explicit ignores with a reason. Venmo monthly CSV exports are parsed by a
+dedicated plugin; Chase credit-card PDFs likewise. CSVs no plugin claims,
+and non-PDF/non-CSV files, remain explicit ignores with a reason.
 
 ## 2. Plugins produce one canonical shape
 

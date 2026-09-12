@@ -25,7 +25,8 @@ records (official evidence)
 ## Current guarantees
 
 - Every discovered file is parsed, explicitly ignored with a reason, or
-  reported as an error. Venmo CSVs are currently explicit ignores.
+  reported as an error. Venmo CSVs and Chase credit-card PDFs are parsed
+  (2026-09); supporting notes remain explicit ignores.
 - Every Chase statement reconciles to its printed balance change, every row
   follows the running-balance chain, and every date lies in its statement.
 - Cash App reconciles per month, not merely at year level.
@@ -58,6 +59,7 @@ records (official evidence)
 7. `decisions.md` — current architectural commitments
 8. `future.md` — Sheets, Plaid-style sources, and interfaces
 9. `setup.md` — commands
+10. `session-2026-09-rules-expansion.md` — handover: credit card & Venmo ingestion, regex rules, year-quirks, and the classification workflow
 
 ## Next boundaries
 
