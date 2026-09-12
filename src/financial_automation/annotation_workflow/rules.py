@@ -26,9 +26,10 @@ _SIGNS = {"positive", "negative"}
 def _validate(rule):
     """Reject silently-broken rules instead of matching the wrong rows.
 
-    A YAML flow mapping like {contains: doordash, inc.} parses as TWO keys
-    and quietly shortens the needle; that exact failure mislabeled DoorDash
-    purchases as income. Unknown keys are therefore load errors.
+    A YAML flow mapping like {contains: example co, inc.} parses as TWO keys
+    and quietly shortens the needle; that exact failure made a payout rule
+    match purchases too, labelling expenses as income. Unknown keys are
+    therefore load errors.
     """
     match = rule.get("match", {})
     if isinstance(match, dict):
@@ -36,7 +37,7 @@ def _validate(rule):
         if unknown:
             raise ValueError(
                 f"rule {rule['id']}: unknown match key(s) {sorted(unknown)} "
-                "(quote needles containing commas, e.g. contains: 'doordash, inc.')")
+                "(quote needles containing commas, e.g. contains: 'example co, inc.')")
         if "contains" in match and "regex" in match:
             raise ValueError(f"rule {rule['id']}: use contains OR regex, not both")
         if not (match.get("contains") or match.get("regex")):

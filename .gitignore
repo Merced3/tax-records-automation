@@ -20,3 +20,6 @@ __pycache__/
 
 # Temporary files from atomic writes
 *.tmp
+
+# Private known-coverage-gap declarations (copy the .example file)
+/config/coverage-gaps.yaml

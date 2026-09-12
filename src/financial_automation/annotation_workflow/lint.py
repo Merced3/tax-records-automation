@@ -10,8 +10,9 @@ three failure classes visible instead of silent:
 - unmatched rows: rows with neither an applicable rule nor human fields.
 
 It also reports rules whose winning rows mix positive and negative amounts,
-because expense/income collisions (the DoorDash failure) look exactly like
-that before they are corrected with `applies.amount_sign`.
+because expense/income collisions look exactly like that before they are
+corrected with `applies.amount_sign` (a platform that both pays the owner and
+charges the owner is matched by one careless rule).
 """
 
 from collections import defaultdict

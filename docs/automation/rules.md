@@ -37,11 +37,12 @@ rules:
 A company name appears in both its payouts and its purchases. Without
 `amount_sign`, one rule claims both.
 
-This actually happened. The rule `match: {contains: doordash, inc.}` is YAML
-flow-mapping syntax, so the unquoted comma produced **two keys** —
-`contains: doordash` plus a stray `inc.: null` — silently shortening the needle
-to `doordash`. Food-delivery purchases were then labelled as delivery income.
-Quote needles containing commas, and scope income rules to `positive`.
+This actually happened in the private rules. A needle written as
+`match: {contains: example co, inc.}` is YAML flow-mapping syntax, so the
+unquoted comma produced **two keys** — `contains: example co` plus a stray
+`inc.: null` — silently shortening the needle. A gig platform's payout rule
+then also matched purchases made through that platform, labelling expenses as
+income. Quote needles containing commas, and scope income rules to `positive`.
 
 `python run.py rules-lint <year>` reports rules whose winning rows mix signs,
 along with conflicts, dead (fully shadowed) rules, and rows nothing decides.

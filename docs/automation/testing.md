@@ -26,7 +26,8 @@ Current regression contracts cover:
 `tests/test_correctness.py` holds the correctness-work failure tests. Each one
 asserts that a *wrong* outcome is caught, not that a happy path works:
 
-- an income rule must not claim same-merchant purchases (the DoorDash collision)
+- an income rule must not claim same-merchant purchases (payout/purchase
+  collision for one platform that both pays and charges)
 - an unquoted comma in a YAML flow mapping is a load error, not a short needle
 - an invalid `amount_sign` is a load error
 - lint detects conflicts, fully shadowed rules, mixed-sign winners, and rows

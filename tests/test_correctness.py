@@ -18,7 +18,7 @@ from financial_automation.annotation_workflow.store import AnnotationState
 from financial_automation.models import Transaction
 
 
-def txn(amount, description="doordash, inc. payout", day=5, institution="Chase",
+def txn(amount, description="example co, inc. payout", day=5, institution="Chase",
         account="Checking"):
     t = Transaction(
         institution=institution, account=account, statement_id="stmt",
@@ -39,12 +39,12 @@ def rules_file(tmp, text):
 INCOME_VS_MEAL = """rules:
   - id: income.payout
     version: 2
-    match: {contains: doordash}
+    match: {contains: example co}
     applies: {amount_sign: positive}
-    suggest: {category: Delivery Driving Income, note: payout}
+    suggest: {category: Gig Income, note: payout}
   - id: meals.order
     version: 1
-    match: {contains: doordash}
+    match: {contains: example co}
     applies: {amount_sign: negative}
     suggest: {category: Meals, note: food order}
 """
@@ -52,20 +52,20 @@ INCOME_VS_MEAL = """rules:
 
 class AmountDirectionRules(unittest.TestCase):
     def test_income_rule_does_not_claim_expenses(self):
-        """The DoorDash failure: an income rule labeled purchases as income."""
+        """The real failure: an income rule labeled purchases as income."""
         with TemporaryDirectory() as tmp:
             rules = load(rules_file(tmp, INCOME_VS_MEAL))
         payout = suggest(txn("512.33"), rules)
-        purchase = suggest(txn("-21.87", "dd doordash jerseymikes"), rules)
-        self.assertEqual("Delivery Driving Income", payout.category)
+        purchase = suggest(txn("-21.87", "example co order sandwich shop"), rules)
+        self.assertEqual("Gig Income", payout.category)
         self.assertEqual("Meals", purchase.category)
 
     def test_malformed_flow_mapping_is_a_load_error(self):
-        """{contains: doordash, inc.} silently shortened the needle before."""
+        """{contains: example co, inc.} silently shortened the needle."""
         with TemporaryDirectory() as tmp:
             path = rules_file(tmp, """rules:
   - id: income.bad
-    match: {contains: doordash, inc.}
+    match: {contains: example co, inc.}
     suggest: {category: X, note: y}
 """)
             with self.assertRaisesRegex(ValueError, "unknown match key"):
@@ -88,13 +88,13 @@ class RulesLint(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             rules = load(rules_file(tmp, """rules:
   - id: broad
-    match: {contains: doordash}
+    match: {contains: example co}
     suggest: {category: Meals, note: broad}
   - id: specific
-    match: {contains: doordash jerseymikes}
+    match: {contains: example co sandwich shop}
     suggest: {category: Meals, note: sandwich}
 """))
-        rows = [txn("-10.00", "dd doordash jerseymikes")]
+        rows = [txn("-10.00", "example co sandwich shop")]
         report = lint(rows, rules)
         self.assertFalse(report.clean)
         self.assertEqual(1, len(report.conflicts))
@@ -115,10 +115,10 @@ class RulesLint(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             rules = load(rules_file(tmp, """rules:
   - id: income.everything
-    match: {contains: doordash}
-    suggest: {category: Delivery Driving Income, note: payout}
+    match: {contains: example co}
+    suggest: {category: Gig Income, note: payout}
 """))
-        report = lint([txn("500.00"), txn("-20.00", "dd doordash order")], rules)
+        report = lint([txn("500.00"), txn("-20.00", "example co order")], rules)
         self.assertIn("income.everything", report.mixed_sign)
 
 
@@ -294,7 +294,7 @@ class Coverage(unittest.TestCase):
         self.assertEqual(1, report.accounts[0].statements)
 
     def test_known_missing_history_is_disclosed_not_hidden(self):
-        known = [{"year": 2024, "institution": "Capital One", "account": "unknown",
+        known = [{"year": 2024, "institution": "Example Former Bank", "account": "unknown",
                   "period": "unknown", "reason": "owner cannot access account"}]
         report = self.report([statement(start=(1, 1), end=(12, 31))], known)
         self.assertEqual(1, len(report.known_gaps))

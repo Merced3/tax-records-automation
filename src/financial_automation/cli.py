@@ -16,7 +16,19 @@ from .pipeline import run_year, transactions
 
 
 def config(root):
-    return yaml.safe_load((root / "config" / "app.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load((root / "config" / "app.yaml").read_text(encoding="utf-8"))
+    # Known-unavailable history names real institutions/accounts, so it lives
+    # in a private file. Its absence must not silently mean "nothing missing".
+    if "known_coverage_gaps" not in cfg:
+        path = root / cfg.get("known_coverage_gaps_path", "config/coverage-gaps.yaml")
+        if path.exists():
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            cfg["known_coverage_gaps"] = data.get("known_coverage_gaps", [])
+            cfg["known_coverage_gaps_declared"] = True
+        else:
+            cfg["known_coverage_gaps"] = []
+            cfg["known_coverage_gaps_declared"] = False
+    return cfg
 
 
 def parser():
@@ -153,7 +165,7 @@ def _calendar_year(root, cfg, args):
     print("  source statements and annotations were not modified")
 
 
-def _print_coverage(report):
+def _print_coverage(report, declared=True):
     print(f"coverage {report.year} (from printed statement periods, not filenames)")
     for entry in report.accounts:
         print(f"  {entry.institution} / {entry.account}")
@@ -168,6 +180,10 @@ def _print_coverage(report):
         for start, end in entry.gaps:
             print(f"    GAP {start} .. {end} ({(end - start).days + 1}d) "
                   "- no statement period covers these days")
+    if not declared:
+        print("  WARNING: no known-coverage-gap file found "
+              "(config/coverage-gaps.yaml); unavailable history cannot be "
+              "reported, so absence of a gap here proves nothing")
     for gap in report.known_gaps:
         print(f"  KNOWN MISSING: {gap.get('institution')} / {gap.get('account')} "
               f"[{gap.get('period', 'unknown')}]")
@@ -228,7 +244,7 @@ def _execute(root, cfg, args, year):
                                          ignored_sources=cfg.get("ignored_sources")).statements)
         report = coverage(year, pipeline_report, cfg.get("known_coverage_gaps"),
                           adjacent)
-        _print_coverage(report)
+        _print_coverage(report, cfg.get("known_coverage_gaps_declared", True))
         return
 
     if args.command == "rules-lint":

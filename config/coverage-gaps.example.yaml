@@ -1,0 +1,20 @@
+# Copy to config/coverage-gaps.yaml (private/gitignored) and edit.
+#
+# Purpose: some history is genuinely unavailable (a closed account, a bank the
+# owner can no longer log into). Coverage reporting must disclose that rather
+# than showing a year as complete. Missing records are NOT evidence of no
+# income or no expenses.
+#
+# Rules:
+#  - `year` is the calendar year the gap affects.
+#  - `period` may be "unknown"; do not invent dates, and never read dates off
+#    a PDF filename.
+#  - A declared gap keeps the year "incomplete", which is the honest state.
+known_coverage_gaps:
+  - year: 2022
+    institution: Example Former Bank
+    account: unknown
+    period: unknown
+    reason: >-
+      Account closed when the owner switched banks; credentials no longer
+      available, so statements cannot currently be retrieved.

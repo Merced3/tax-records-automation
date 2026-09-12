@@ -6,25 +6,11 @@ rules_path: config/rules.yaml
 # Explicitly declared non-parsed sources. `match` is a path substring.
 ignored_sources: []
 
-# Known-unavailable history. Declared here so coverage reporting shows it as a
-# disclosed limitation instead of silently looking complete. Dates may be
-# unknown; say so rather than guessing. Never infer these from filenames.
-known_coverage_gaps:
-  - year: 2022
-    institution: Capital One
-    account: unknown
-    period: unknown
-    reason: >-
-      Owner switched banks during 2022 and cannot currently access the former
-      Capital One account. Missing records are NOT evidence of no activity.
-      See records/2022/Bank Statements/COVERAGE-NOTES.txt (private).
-  - year: 2023
-    institution: Chase
-    account: Credit Card
-    period: 2023-01-01..2023-06-30
-    reason: >-
-      Credit-card statements begin mid-2023. Earlier months are not demanded
-      without evidence the account existed then; confirm the opening date.
+# Known-unavailable history is private operational data (it names real
+# institutions and accounts), so it lives in a gitignored file. Copy
+# config/coverage-gaps.example.yaml to config/coverage-gaps.yaml.
+# Never infer these from filenames; unknown dates must say "unknown".
+known_coverage_gaps_path: config/coverage-gaps.yaml
 
 tax_professional:
   # The fourth spreadsheet column is the human explanation/business purpose.
