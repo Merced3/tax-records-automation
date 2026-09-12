@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import yaml
 
-from .annotation_workflow import generate, load, load_states, need_human, suggest
+from .annotation_workflow import generate, lint, load, load_states, need_human, suggest
 from .auditing import audit
 from .outputs import write_year
 from .pipeline import run_year, transactions
@@ -18,7 +18,7 @@ def config(root):
 def parser():
     p = argparse.ArgumentParser(description="Financial statement automation")
     sub = p.add_subparsers(dest="command", required=True)
-    for name in ("audit", "annotate", "annotate-dry", "build", "final"):
+    for name in ("audit", "annotate", "annotate-dry", "build", "final", "rules-lint"):
         cmd = sub.add_parser(name)
         cmd.add_argument("year", type=int, nargs="?" if name in ("build",) else None)
     need = sub.add_parser("need-you")
@@ -103,6 +103,36 @@ def _execute(root, cfg, args, year):
         for txn, proposal in previews[:40]:
             print(f"  {txn.date:%m/%d/%Y} {txn.amount:>10} {txn.merchant[:34]:34} -> "
                   f"{proposal.category} [{proposal.rule_id} v{proposal.rule_version}]")
+        return
+
+    if args.command == "rules-lint":
+        states = load_states(annotation_path)
+        report = lint(rows, _rules(root, cfg), states)
+        print(f"{year}: rules lint")
+        if report.conflicts:
+            print(f"  CONFLICTS: {len(report.conflicts)} row(s) matched by rules with different suggestions")
+            pairs = {}
+            for txn, matches in report.conflicts:
+                key = tuple(r['id'] for r in matches)
+                pairs[key] = pairs.get(key, 0) + 1
+            for key, count in sorted(pairs.items(), key=lambda kv: -kv[1]):
+                print(f"    {count:>5}  {' > '.join(key)}")
+        if report.shadowed:
+            print(f"  SHADOWED: {len(report.shadowed)} rule(s) matched rows but never won")
+            for rule_id, count in sorted(report.shadowed.items(), key=lambda kv: -kv[1]):
+                print(f"    {count:>5}  {rule_id}")
+        if report.mixed_sign:
+            print(f"  MIXED SIGN: {len(report.mixed_sign)} rule(s) won both income and expense rows")
+            for rule_id, (pos, neg) in report.mixed_sign.items():
+                print(f"    {rule_id}: +{pos} / -{neg} (consider applies.amount_sign)")
+        if report.unmatched:
+            print(f"  UNMATCHED: {len(report.unmatched)} row(s) with no rule and no human fields")
+            for txn in report.unmatched[:20]:
+                print(f"    {txn.date:%m/%d/%Y} {txn.amount:>10} {txn.merchant[:44]}")
+        if report.clean:
+            print("  clean: every row is decided by exactly one policy or a human")
+        else:
+            raise SystemExit(1)
         return
 
     if args.command == "need-you":

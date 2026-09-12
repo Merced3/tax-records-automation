@@ -22,6 +22,19 @@ rules:
       category: Software
       note: Needs business-purpose review
 
+  # Direction matters: an income rule must not claim purchases whose text
+  # merely contains the same company name. amount_sign restricts a rule to
+  # positive (money in) or negative (money out) amounts.
+  - id: income.example-payout
+    version: 1
+    match:
+      contains: 'example gig company, inc.'   # quote needles with commas!
+    applies:
+      amount_sign: positive
+    suggest:
+      category: Gig Income
+      note: Weekly payout
+
   # Regex matching is also supported. The pattern runs against lowercased
   # merchant + raw bank text, and note tokens {1}..{9} are filled with the
   # regex capture groups (useful for transfer directions/account endings).

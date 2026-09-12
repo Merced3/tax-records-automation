@@ -18,6 +18,40 @@ class Suggestion:
         return bool(self.category or self.note)
 
 
+_MATCH_KEYS = {"contains", "regex"}
+_APPLIES_KEYS = {"years", "institutions", "accounts", "amount_sign"}
+_SIGNS = {"positive", "negative"}
+
+
+def _validate(rule):
+    """Reject silently-broken rules instead of matching the wrong rows.
+
+    A YAML flow mapping like {contains: doordash, inc.} parses as TWO keys
+    and quietly shortens the needle; that exact failure mislabeled DoorDash
+    purchases as income. Unknown keys are therefore load errors.
+    """
+    match = rule.get("match", {})
+    if isinstance(match, dict):
+        unknown = set(match) - _MATCH_KEYS
+        if unknown:
+            raise ValueError(
+                f"rule {rule['id']}: unknown match key(s) {sorted(unknown)} "
+                "(quote needles containing commas, e.g. contains: 'doordash, inc.')")
+        if "contains" in match and "regex" in match:
+            raise ValueError(f"rule {rule['id']}: use contains OR regex, not both")
+        if not (match.get("contains") or match.get("regex")):
+            raise ValueError(f"rule {rule['id']}: empty match")
+    elif not match:
+        raise ValueError(f"rule {rule['id']}: missing match")
+    applies = rule.get("applies") or {}
+    unknown = set(applies) - _APPLIES_KEYS
+    if unknown:
+        raise ValueError(f"rule {rule['id']}: unknown applies key(s) {sorted(unknown)}")
+    sign = applies.get("amount_sign")
+    if sign is not None and sign not in _SIGNS:
+        raise ValueError(f"rule {rule['id']}: amount_sign must be one of {sorted(_SIGNS)}")
+
+
 def load(path):
     path = Path(path)
     if not path.exists():
@@ -33,33 +67,43 @@ def load(path):
         if rule["id"] in seen:
             raise ValueError(f"duplicate rule id: {rule['id']}")
         seen.add(rule["id"])
+        _validate(rule)
     return rules
 
 
-def suggest(transaction, rules):
+def applicable(transaction, rule):
+    """True when the rule's scope AND match apply to this transaction."""
+    applies = rule.get("applies", {}) or {}
+    years = applies.get("years")
+    institutions = applies.get("institutions")
+    accounts = applies.get("accounts")
+    sign = applies.get("amount_sign")
+    if years and transaction.date.year not in [int(y) for y in years]:
+        return None
+    if institutions and transaction.institution not in institutions:
+        return None
+    if accounts and transaction.account not in accounts:
+        return None
+    if sign == "positive" and transaction.amount <= 0:
+        return None
+    if sign == "negative" and transaction.amount >= 0:
+        return None
     haystack = f"{transaction.merchant}\n{transaction.raw_description}".lower()
+    match = rule.get("match", {})
+    if isinstance(match, dict) and match.get("regex"):
+        found = re.search(str(match["regex"]), haystack)
+        return found.groups() if found else None
+    needle = match.get("contains") if isinstance(match, dict) else match
+    if needle and str(needle).lower() in haystack:
+        return ()
+    return None
+
+
+def suggest(transaction, rules):
     for rule in rules:
-        applies = rule.get("applies", {}) or {}
-        years = applies.get("years")
-        institutions = applies.get("institutions")
-        accounts = applies.get("accounts")
-        if years and transaction.date.year not in [int(y) for y in years]:
+        groups = applicable(transaction, rule)
+        if groups is None:
             continue
-        if institutions and transaction.institution not in institutions:
-            continue
-        if accounts and transaction.account not in accounts:
-            continue
-        match = rule.get("match", {})
-        groups = ()
-        if isinstance(match, dict) and match.get("regex"):
-            found = re.search(str(match["regex"]), haystack)
-            if not found:
-                continue
-            groups = found.groups()
-        else:
-            needle = match.get("contains") if isinstance(match, dict) else match
-            if not needle or str(needle).lower() not in haystack:
-                continue
         proposed = rule.get("suggest", {})
         # Backward-compatible old shape while private rules migrate.
         category = proposed.get("category", rule.get("category", ""))
