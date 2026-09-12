@@ -124,3 +124,125 @@ class RulesLint(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+VENMO_CSV = """Account Statement - (@user) ,,,,,,,,,,,,,,,,,,,,,
+Account Activity,,,,,,,,,,,,,,,,,,,,,
+,ID,Datetime,Type,Status,Note,From,To,Amount (total),Amount (tip),Amount (tax),Amount (fee),Tax Rate,Tax Exempt,Funding Source,Destination,Beginning Balance,Ending Balance,Statement Period Venmo Fees,Terminal Location,Year to Date Venmo Fees,Disclaimer
+,,,,,,,,,,,,,,,,$0.00,,,,,
+,111,2024-02-03T10:00:00,Payment,Complete,Food,Alex,User,+ $50.00,,,,,,,Venmo balance,,,,Venmo,,
+,222,2024-02-04T10:00:00,Payment,Complete,,User,Store,- $50.00,,,,,,Visa *1234,,,,,Venmo,,
+,333,2024-02-05T10:00:00,Payment,Cancelled,,,,- $99.00,,,,,,Venmo balance,,,,,Venmo,,
+,,,,,,,,,,,,,,,,,$50.00,$0.00,,$0.00,disclaimer
+"""
+
+
+def parse_venmo(text=VENMO_CSV, path="synthetic/Feb.csv"):
+    from financial_automation.ingestion.venmo import VenmoParser
+    return VenmoParser().parse_text(text, path, "Venmo", 2024)
+
+
+class StrictVenmoParsing(unittest.TestCase):
+    def test_malformed_amount_raises_instead_of_zero(self):
+        """Silently returning 0.00 let a bad row pass a row-count audit."""
+        broken = VENMO_CSV.replace("+ $50.00", "+ $5O.OO")
+        with self.assertRaisesRegex(ValueError, "unparsable Venmo amount"):
+            parse_venmo(broken)
+
+    def test_non_moving_status_is_skipped_and_counted(self):
+        statement = parse_venmo()
+        self.assertEqual(2, len(statement.transactions))
+        self.assertEqual({"Cancelled": 1}, statement.metadata["skipped_statuses"])
+
+    def test_identity_comes_from_provider_id_not_path(self):
+        """Moving or renaming an export must not change transaction identity."""
+        a = parse_venmo(path="records/2024/Bank Statements/Venmo/Feb.csv")
+        b = parse_venmo(path="somewhere/else/Feb-copy.csv")
+        self.assertEqual([t.transaction_id for t in a.transactions],
+                         [t.transaction_id for t in b.transactions])
+        self.assertEqual(a.statement_id, b.statement_id)
+
+    def test_duplicate_provider_id_is_an_error(self):
+        dup = VENMO_CSV.replace(",222,", ",111,")
+        with self.assertRaisesRegex(ValueError, "duplicate Venmo ID"):
+            parse_venmo(dup)
+
+    def test_balance_chain_audit_catches_wrong_direction(self):
+        from financial_automation.auditing.reconcile import AuditReport, _audit_venmo
+        from pathlib import Path as P
+        with TemporaryDirectory() as tmp:
+            good = P(tmp) / "Feb.csv"
+            good.write_text(VENMO_CSV, encoding="utf-8")
+            statement = parse_venmo(VENMO_CSV, str(good))
+            report = AuditReport(2024)
+            _audit_venmo(report, [statement])
+            self.assertTrue(report.passed, [c.detail for c in report.checks])
+
+            # Flip the card-funded payment to balance-funded: the printed
+            # ending balance can no longer be reached.
+            bad = P(tmp) / "Bad.csv"
+            bad.write_text(VENMO_CSV.replace(",,Visa *1234,,", ",,,Venmo balance,"),
+                           encoding="utf-8")
+            broken = parse_venmo(bad.read_text(encoding="utf-8"), str(bad))
+            report = AuditReport(2024)
+            _audit_venmo(report, [broken])
+            self.assertFalse(report.passed)
+            self.assertIn("Venmo balance chain",
+                          [c.name for c in report.checks if not c.passed])
+
+
+class IdentityMigration(unittest.TestCase):
+    def test_human_text_follows_a_changed_transaction_id(self):
+        """Switching Venmo to provider IDs must not orphan human notes."""
+        from financial_automation.annotation_workflow.store import generate, load_states
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "annotations").mkdir()
+            path = root / "annotations" / "2024.csv"
+            row = parse_venmo().transactions[0]
+            generate([row], path, [], root)
+
+            # Simulate the human typing a decision, then an identity change.
+            import csv as _csv
+            with path.open(newline="", encoding="utf-8") as f:
+                rows = list(_csv.DictReader(f))
+            rows[0]["Category"] = "Reimbursement"
+            rows[0]["Note"] = "friend paid me back for dinner"
+            with path.open("w", newline="", encoding="utf-8") as f:
+                writer = _csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+
+            moved = parse_venmo().transactions[0]
+            moved.provider_id = ""           # force the old identity scheme
+            moved.assign_id()
+            self.assertNotEqual(row.transaction_id, moved.transaction_id)
+            result = generate([moved], path, [], root)
+            state = load_states(path)[moved.transaction_id]
+            self.assertEqual("friend paid me back for dinner", state.note)
+            self.assertEqual("Reimbursement", state.category)
+            self.assertEqual(1, result["legacy_migrated"])
+
+    def test_unmatched_human_row_still_aborts(self):
+        """The safety stop must survive the new content-based fallback."""
+        from financial_automation.annotation_workflow.store import generate
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "annotations").mkdir()
+            path = root / "annotations" / "2024.csv"
+            row = parse_venmo().transactions[0]
+            generate([row], path, [], root)
+            import csv as _csv
+            with path.open(newline="", encoding="utf-8") as f:
+                rows = list(_csv.DictReader(f))
+            rows[0]["Note"] = "irreplaceable human text"
+            rows[0]["Amount"] = "-1234.56"      # no longer any such transaction
+            rows[0]["Transaction ID"] = "stale"
+            with path.open("w", newline="", encoding="utf-8") as f:
+                writer = _csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            before = path.read_text(encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "SAFETY STOP"):
+                generate([row], path, [], root)
+            self.assertEqual(before, path.read_text(encoding="utf-8"))

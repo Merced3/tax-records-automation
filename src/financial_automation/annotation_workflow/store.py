@@ -114,6 +114,7 @@ def generate(transactions, path, rules, repo_root):
         journal(repo_root, "annotation-human-changes", {"path": str(path),
                                                         "changes": changes})
 
+    new_ids = {t.transaction_id for t in transactions}
     legacy = defaultdict(deque)
     legacy_by_fields = defaultdict(deque)
     for row in old_rows:
@@ -121,6 +122,13 @@ def generate(transactions, path, rules, repo_root):
             legacy[row.get("Fingerprint", "")].append(row)
             legacy_by_fields[(row.get("Date", ""), row.get("Amount", ""),
                               row.get("Bank Description", ""))].append(row)
+        elif row["Transaction ID"] not in new_ids:
+            # Identity-scheme migrations (for example Venmo moving to provider
+            # row IDs) change Transaction IDs for unchanged source rows. Index
+            # only rows whose old ID no longer exists, so human text follows
+            # its transaction and is never copied onto a second row.
+            legacy_by_fields[(row.get("Date", ""), row.get("Amount", ""),
+                              row.get("Raw Bank Description", ""))].append(row)
 
     output = []
     matched_old = set()

@@ -128,24 +128,77 @@ def _audit_chase(result, statements):
                "every row chains" if not chain_bad else "; ".join(chain_bad[:8]))
 
 
+def _venmo_money(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return Decimal("0.00")
+    digits = re.sub(r"[^0-9.]", "", raw)
+    if not digits:
+        return Decimal("0.00")
+    value = money(digits)
+    return -value if "-" in raw else value
+
+
 def _audit_venmo(result, statements):
-    """Venmo CSV exports carry no printed totals, so the independent check is
-    row completeness: re-scan the file for completed transaction IDs and
-    compare with what the parser claims, plus dates in the file's own span."""
-    count_bad, date_bad = [], []
+    """Venmo exports print beginning/ending balances and, per row, the funding
+    source and destination. That is an independent arithmetic relationship:
+
+        ending = beginning + (money into the Venmo balance)
+                           + (money out funded by the Venmo balance)
+
+    Card-funded payments never touch the balance, so they must be excluded.
+    This is re-derived straight from the file, not from parser output, and it
+    also proves parsed row identity/count against the file's own IDs.
+    """
+    balance_bad, count_bad, date_bad, id_bad = [], [], [], []
     for statement in statements:
+        name = Path(statement.path).name
         with open(statement.path, encoding="utf-8-sig", errors="replace") as f:
             rows = list(csv.reader(io.StringIO(f.read())))
-        complete = sum(1 for r in rows
-                       if len(r) > 8 and r[1].strip().isdigit()
-                       and r[4].strip() == "Complete")
-        if complete != len(statement.transactions):
-            count_bad.append(f"{Path(statement.path).name}: parsed {len(statement.transactions)}/{complete}")
+        header_at = next((i for i, r in enumerate(rows)
+                          if r[1:3] == ["ID", "Datetime"]), None)
+        if header_at is None:
+            count_bad.append(f"{name}: no transaction header")
+            continue
+        beginning = ending = Decimal("0.00")
+        delta = Decimal("0.00")
+        file_ids = []
+        for row in rows[header_at + 1:]:
+            if len(row) < 18:
+                continue
+            if not row[1].strip():
+                if row[16].strip():
+                    beginning = _venmo_money(row[16])
+                if row[17].strip():
+                    ending = _venmo_money(row[17])
+                continue
+            if row[4].strip() not in ("Complete", "Issued"):
+                continue
+            file_ids.append(row[1].strip())
+            amount = _venmo_money(row[8])
+            funding, destination = row[14].strip(), row[15].strip()
+            if amount > 0:
+                if destination in ("Venmo balance", ""):
+                    delta += amount
+            elif funding in ("Venmo balance", ""):
+                delta += amount
+        if beginning + delta != ending:
+            balance_bad.append(f"{name}: {beginning}+{delta} != {ending}")
+        parsed_ids = [t.provider_id for t in statement.transactions]
+        if len(parsed_ids) != len(file_ids):
+            count_bad.append(f"{name}: parsed {len(parsed_ids)}/{len(file_ids)}")
+        if sorted(parsed_ids) != sorted(file_ids):
+            id_bad.append(name)
         for txn in statement.transactions:
             if not (statement.period_start <= txn.date <= statement.period_end):
-                date_bad.append(f"{Path(statement.path).name}: {txn.date}")
+                date_bad.append(f"{name}: {txn.date}")
+    result.add("Venmo balance chain", not balance_bad,
+               f"{len(statements)} files reconcile beginning->ending balance"
+               if not balance_bad else "; ".join(balance_bad[:8]))
     result.add("Venmo row completeness", not count_bad,
                f"{len(statements)} files reconcile" if not count_bad else "; ".join(count_bad[:8]))
+    result.add("Venmo provider IDs", not id_bad,
+               "parsed IDs match file IDs" if not id_bad else "; ".join(id_bad[:8]))
     result.add("Venmo transaction dates", not date_bad,
                "all dates inside file spans" if not date_bad else "; ".join(date_bad[:8]))
 

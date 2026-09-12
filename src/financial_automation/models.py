@@ -32,6 +32,7 @@ class Transaction:
     balance: Optional[Decimal] = None
     fee: Optional[Decimal] = None
     occurrence: int = 1
+    provider_id: str = ""
     transaction_id: str = ""
     content_fingerprint: str = ""
     metadata: Dict[str, str] = field(default_factory=dict)
@@ -51,9 +52,15 @@ class Transaction:
     def assign_id(self):
         """Assign a unique, reproducible row identity.
 
-        Running balance distinguishes repeated Chase rows. Occurrence handles
-        formats without a running balance (Cash App) or exact repeats.
+        When the provider supplies its own row ID (Venmo), identity comes from
+        that ID so it survives file moves, renames and re-exports. Otherwise
+        running balance distinguishes repeated Chase rows, and occurrence
+        handles formats without a running balance (Cash App) or exact repeats.
         """
+        if self.provider_id:
+            self.transaction_id = digest(self.institution, self.account,
+                                         "provider", self.provider_id)
+            return
         self.transaction_id = digest(
             self.institution, self.account, self.statement_id,
             self.date.isoformat(), self.amount, self.raw_description,
@@ -72,6 +79,7 @@ class ParsedStatement:
     period_end: date
     transactions: List[Transaction]
     source_sha256: str
+    metadata: Dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
