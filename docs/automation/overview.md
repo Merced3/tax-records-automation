@@ -87,6 +87,9 @@ regrouping conserves every row and every amount.
 9. `setup.md` — commands
 10. `context-evidence.md` — future evidence-adapter contract (not implemented)
 11. `session-2026-09-rules-expansion.md` — handover: credit card & Venmo ingestion, regex rules, year-quirks, and the classification workflow
+12. `session-2026-09-correctness.md` — handover: direction rules, lint, strict
+    Venmo identity, coverage, approval/resolution, calendar-year exports, and
+    the **remaining blockers** that keep the deliverable unfinished
 
 ## Next boundaries
 
