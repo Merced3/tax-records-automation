@@ -23,7 +23,33 @@ Current regression contracts cover:
 - year-specific rules
 - atomic annotation rewrite, backup, and human-text preservation
 
-The private `audit` command is the integration check against real records. The
+`tests/test_correctness.py` holds the correctness-work failure tests. Each one
+asserts that a *wrong* outcome is caught, not that a happy path works:
+
+- an income rule must not claim same-merchant purchases (the DoorDash collision)
+- an unquoted comma in a YAML flow mapping is a load error, not a short needle
+- an invalid `amount_sign` is a load error
+- lint detects conflicts, fully shadowed rules, mixed-sign winners, and rows
+  nothing decides; a human-reviewed row is not "unmatched"
+- a malformed Venmo amount raises instead of silently becoming 0.00
+- non-moving Venmo statuses are counted, not silently dropped
+- Venmo identity survives moving/renaming the export, and duplicate provider
+  IDs are an error
+- the Venmo balance-chain audit fails when a card-funded payment is wrongly
+  treated as balance-funded
+- human text follows a changed Transaction ID, and the safety stop still aborts
+  (leaving the file byte-identical) when a human row cannot be matched
+- coverage finds a missing middle statement that every arithmetic check passes
+- empty discovery is not complete coverage
+- a January statement covers prior-December days
+- declared known-missing history keeps the year incomplete
+- a derived (unprinted) period reports "unmeasurable", never fabricated gaps
+
+A failure test is only trusted after the fix is temporarily reverted and the
+test is observed to fail. Tests that cannot fail prove nothing.
+
+The private `audit`, `coverage`, and `rules-lint` commands are the integration
+checks against real records. The
 public tests use synthetic statement text so no financial information enters
 Git. Tests prevent known regressions; audits detect unknown inconsistencies in
 real evidence.

@@ -107,13 +107,57 @@ rules are ignored. `config/rules.example.yaml` and
 personal details. Previously published history is accepted by the owner, but no
 new private operational data should enter commits.
 
+## 0013 — Rules carry amount direction, and lint is part of trusting them
+
+`applies.amount_sign` restricts a rule to money-in or money-out rows, because a
+company name appears in both its payouts and its purchases. Unknown `match`
+or `applies` keys are load errors: an unquoted comma in a YAML flow mapping
+silently shortened a needle and mislabeled food-delivery purchases as delivery
+income, and silent acceptance is what made that possible.
+
+A matching rule is not evidence the match was correct. `rules-lint` reports
+multi-rule conflicts, fully shadowed (dead) rules, mixed-sign winners, and rows
+neither a rule nor a human decides. It reports rather than auto-corrects:
+refunds legitimately reverse direction, and that judgment is the owner's.
+
+## 0014 — Identity comes from the provider when the provider supplies one
+
+When a source prints its own stable row ID, Transaction ID is derived from it,
+so moving or renaming an export cannot change identity. Statement identity for
+such sources is content-derived, never path-derived.
+
+Identity-scheme migrations must be lossless. Rows whose old ID disappeared are
+re-matched by financial content so human text follows its transaction, exactly
+once, and the safety stop still aborts on any unmatched human row. Preservation
+is proven after the fact against a pre-change snapshot, not asserted.
+
+## 0015 — Coverage is measured, disclosed, and separate from reconciliation
+
+Reconciliation proves the records present were extracted faithfully. It cannot
+prove they are all the records: an absent statement breaks no balance chain.
+Coverage is therefore computed from printed statement periods only — never
+filenames — and adjacent years are consulted because cycles cross calendar
+years.
+
+Sources that print no period report coverage as *unmeasurable* instead of
+fabricating gaps from row dates. Known-unavailable history is declared in
+`config/app.yaml` with a reason so it is disclosed, and a year counts as
+complete only when every measurable account covers it and nothing is declared
+missing. Empty discovery is never success.
+
 ## Accepted limitations
 
 - Merchant cleanup is best-effort and human-reviewed.
 - PDF parser and audit both depend on PDF text extraction; independent statement
   arithmetic and synthetic regressions reduce but cannot make that risk zero.
 - Venmo monthly CSV exports are ingested by a dedicated plugin (since
-  2026-09); its audit is row-completeness + date-span because the exports
-  carry no printed totals.
+  2026-09). They print no Money In/Out summary, but their beginning/ending
+  balances and per-row funding sources support a real balance-chain audit.
+  They print no statement period, so their day coverage is unmeasurable.
+- Coverage reporting proves which days statements cover. It cannot discover an
+  account the owner never mentioned and whose statements were never supplied;
+  such history must be declared to be reported.
+- Rule lint reports classification conflicts. Resolving them, and judging
+  business purpose or deductibility, remains human work.
 - A network bank-data source, Discord interface, and Google Sheets integration
   are future adapters, not core logic.

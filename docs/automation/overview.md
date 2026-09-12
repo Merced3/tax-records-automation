@@ -30,6 +30,12 @@ records (official evidence)
 - Every Chase statement reconciles to its printed balance change, every row
   follows the running-balance chain, and every date lies in its statement.
 - Cash App reconciles per month, not merely at year level.
+- Venmo exports reconcile beginning-to-ending balance, and parsed provider row
+  IDs match the file's own IDs.
+- Coverage is measured from printed statement periods, so a statement that was
+  never supplied is reported instead of passing silently.
+- Rules carry amount direction, and `rules-lint` reports conflicts, dead rules,
+  mixed-sign winners, and rows nothing decides.
 - Lookalike transactions have separate stable transaction IDs. A content
   fingerprint is retained only for comparison/deduplication.
 - Annotation rewrites create a snapshot, write a temporary file, validate it,
@@ -43,8 +49,12 @@ records (official evidence)
 
 - Merchant cleanup is a convenience, not proof.
 - A merchant category does not establish tax deductibility.
-- A PDF parser plus a reconciliation audit is strong evidence of completeness,
-  but the official PDF remains authoritative.
+- Passing audits do not prove complete historical coverage. They prove the
+  supplied records were extracted faithfully. Coverage and known-missing
+  history are reported separately and honestly.
+- A rule matching a row is not evidence the match was correct.
+- A PDF parser plus a reconciliation audit is strong evidence of faithful
+  extraction, but the official PDF remains authoritative.
 - The fourth professional column is currently configured as the human `Note`.
   Confirm that mapping with the tax professional before final export.
 
@@ -59,7 +69,8 @@ records (official evidence)
 7. `decisions.md` — current architectural commitments
 8. `future.md` — Sheets, Plaid-style sources, and interfaces
 9. `setup.md` — commands
-10. `session-2026-09-rules-expansion.md` — handover: credit card & Venmo ingestion, regex rules, year-quirks, and the classification workflow
+10. `context-evidence.md` — future evidence-adapter contract (not implemented)
+11. `session-2026-09-rules-expansion.md` — handover: credit card & Venmo ingestion, regex rules, year-quirks, and the classification workflow
 
 ## Next boundaries
 

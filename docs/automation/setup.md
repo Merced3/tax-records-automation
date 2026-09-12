@@ -31,6 +31,14 @@ python run.py annotate 2022
 # Preview current rule suggestions without writing
 python run.py annotate-dry 2022
 
+# Which days of the year do printed statement periods actually cover?
+# Reports gaps and declared known-missing history; exits honestly.
+python run.py coverage 2022
+
+# Challenge the rules: conflicts, dead rules, mixed-sign winners,
+# and rows neither a rule nor a human decides. Non-zero exit if unclean.
+python run.py rules-lint 2022
+
 # Human work queue; suggestions remain visible for approval/override
 python run.py need-you 2022
 python run.py need-you 2022 --order smallest --limit 50
@@ -45,6 +53,9 @@ python run.py final 2022
 
 # Necessary public regression tests
 python -m unittest discover -s tests -v
+
+# After any identity/schema migration: prove human text survived
+python tools/verify_human_preservation.py backups/<snapshot-dir>
 ```
 
 ## Annotation columns
@@ -64,10 +75,12 @@ a human-owned field is filled.
 1. Edit private `config/rules.yaml`.
 2. Increase the rule's `version` when its meaning changes.
 3. Restrict `applies.years` when the same merchant means different things in
-   different years.
+   different years, and `applies.amount_sign` when a name appears in both
+   payouts and purchases. Quote any needle containing a comma.
 4. Run `annotate-dry`.
-5. Run `annotate` to refresh suggestion columns.
-6. Approve or override by entering human-owned fields.
+5. Run `rules-lint` and resolve conflicts, dead rules, and mixed-sign winners.
+6. Run `annotate` to refresh suggestion columns.
+7. Approve or override by entering human-owned fields.
 
 Rules no longer masquerade as human annotations and can be refreshed without
 wiping prior decisions.

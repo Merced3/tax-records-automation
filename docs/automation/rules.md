@@ -17,6 +17,7 @@ rules:
       years: [2022, 2023]
       institutions: [Chase]
       accounts: [Everyday Spend Bank Account]
+      amount_sign: negative      # negative = money out, positive = money in
     suggest:
       category: Fuel
       note: Needs trip-purpose review
@@ -28,6 +29,24 @@ rules:
 - First matching rule wins; specific rules belong before general ones.
 - Suggestions are recomputed on every annotation refresh.
 - Human fields are never overwritten.
+- Unknown `match`/`applies` keys and invalid `amount_sign` values are load
+  errors, not ignored text.
+
+## Direction matters
+
+A company name appears in both its payouts and its purchases. Without
+`amount_sign`, one rule claims both.
+
+This actually happened. The rule `match: {contains: doordash, inc.}` is YAML
+flow-mapping syntax, so the unquoted comma produced **two keys** —
+`contains: doordash` plus a stray `inc.: null` — silently shortening the needle
+to `doordash`. Food-delivery purchases were then labelled as delivery income.
+Quote needles containing commas, and scope income rules to `positive`.
+
+`python run.py rules-lint <year>` reports rules whose winning rows mix signs,
+along with conflicts, dead (fully shadowed) rules, and rows nothing decides.
+Mixed signs are not automatically wrong — refunds and reimbursements are real —
+so the lint reports them for human review instead of guessing.
 
 ## Year context
 

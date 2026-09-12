@@ -104,6 +104,9 @@ class VenmoParser(StatementParser):
             path=path, parser_name=self.name, institution="Venmo", account="Venmo",
             statement_id=statement_id, period_start=start, period_end=end,
             transactions=transactions, source_sha256=source_hash,
+            # Venmo exports print no statement period; this span is derived
+            # from the rows themselves and cannot establish day coverage.
+            period_source="derived",
             metadata={"skipped_statuses": dict(skipped)},
         )
 

@@ -6,7 +6,7 @@ import sys
 import yaml
 
 from .annotation_workflow import generate, lint, load, load_states, need_human, suggest
-from .auditing import audit
+from .auditing import audit, coverage
 from .outputs import write_year
 from .pipeline import run_year, transactions
 
@@ -18,7 +18,8 @@ def config(root):
 def parser():
     p = argparse.ArgumentParser(description="Financial statement automation")
     sub = p.add_subparsers(dest="command", required=True)
-    for name in ("audit", "annotate", "annotate-dry", "build", "final", "rules-lint"):
+    for name in ("audit", "annotate", "annotate-dry", "build", "final",
+                 "rules-lint", "coverage"):
         cmd = sub.add_parser(name)
         cmd.add_argument("year", type=int, nargs="?" if name in ("build",) else None)
     need = sub.add_parser("need-you")
@@ -65,6 +66,31 @@ def _print_audit(audit_report, pipeline_report):
     print("  => " + ("ALL CHECKS PASSED" if audit_report.passed else "CHECK FAILURES"))
 
 
+def _print_coverage(report):
+    print(f"coverage {report.year} (from printed statement periods, not filenames)")
+    for entry in report.accounts:
+        print(f"  {entry.institution} / {entry.account}")
+        if entry.period_unmeasurable:
+            print(f"    {entry.statements} export(s), day coverage UNMEASURABLE "
+                  "(source prints no statement period)")
+            print(f"    observed activity {entry.first} .. {entry.last}; "
+                  "absence of rows is not evidence of no activity")
+            continue
+        print(f"    {entry.statements} statement(s), {entry.covered_days}/{entry.year_days} "
+              f"days ({entry.percent:.1f}%), evidence {entry.first} .. {entry.last}")
+        for start, end in entry.gaps:
+            print(f"    GAP {start} .. {end} ({(end - start).days + 1}d) "
+                  "- no statement period covers these days")
+    for gap in report.known_gaps:
+        print(f"  KNOWN MISSING: {gap.get('institution')} / {gap.get('account')} "
+              f"[{gap.get('period', 'unknown')}]")
+        print(f"    {' '.join(str(gap.get('reason', '')).split())}")
+    print(f"  undeclared gap days: {report.undeclared_gap_days}")
+    print("  => " + ("full-year coverage with nothing declared missing"
+                     if report.complete else
+                     "INCOMPLETE: this year's records do not cover the whole year"))
+
+
 def _execute(root, cfg, args, year):
     pipeline_report, rows = _load(root, cfg, year)
     audit_report = audit(year, pipeline_report)
@@ -103,6 +129,19 @@ def _execute(root, cfg, args, year):
         for txn, proposal in previews[:40]:
             print(f"  {txn.date:%m/%d/%Y} {txn.amount:>10} {txn.merchant[:34]:34} -> "
                   f"{proposal.category} [{proposal.rule_id} v{proposal.rule_version}]")
+        return
+
+    if args.command == "coverage":
+        # A year's late-December days are covered by the NEXT year's January
+        # statement, so neighbouring years are scanned for evidence only.
+        adjacent = []
+        for neighbour in (year - 1, year + 1):
+            if neighbour in cfg["years"]:
+                adjacent.extend(run_year(root / cfg["records_root"], neighbour,
+                                         ignored_sources=cfg.get("ignored_sources")).statements)
+        report = coverage(year, pipeline_report, cfg.get("known_coverage_gaps"),
+                          adjacent)
+        _print_coverage(report)
         return
 
     if args.command == "rules-lint":

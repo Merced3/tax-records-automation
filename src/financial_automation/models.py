@@ -79,6 +79,11 @@ class ParsedStatement:
     period_end: date
     transactions: List[Transaction]
     source_sha256: str
+    # "printed": the period is stated in the statement itself, so absence of
+    # activity is evidence. "derived": the period was inferred from the rows
+    # present (Venmo exports print no period), so it proves nothing about the
+    # days around them and must not be reported as covered or as a gap.
+    period_source: str = "printed"
     metadata: Dict[str, object] = field(default_factory=dict)
 
 

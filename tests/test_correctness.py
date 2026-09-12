@@ -246,3 +246,70 @@ class IdentityMigration(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "SAFETY STOP"):
                 generate([row], path, [], root)
             self.assertEqual(before, path.read_text(encoding="utf-8"))
+
+
+def statement(account="Checking", start=(1, 1), end=(1, 31), year=2024,
+              period_source="printed", institution="Chase", rows=()):
+    from financial_automation.models import ParsedStatement
+    return ParsedStatement(
+        path=f"synthetic/{account}-{start}-{end}.pdf", parser_name="chase",
+        institution=institution, account=account, statement_id=f"{account}{start}{end}",
+        period_start=date(year, *start), period_end=date(year, *end),
+        transactions=list(rows), source_sha256="x", period_source=period_source)
+
+
+class Coverage(unittest.TestCase):
+    def report(self, statements, known=None, adjacent=()):
+        from financial_automation.auditing.coverage import coverage
+        from financial_automation.models import PipelineReport
+        pipeline = PipelineReport(statements=list(statements))
+        return coverage(2024, pipeline, known, adjacent)
+
+    def test_missing_middle_statement_is_found(self):
+        """Every statement can reconcile while a whole cycle is absent.
+        This is the real 2024 Everyday Spend gap, reduced to synthetic data."""
+        report = self.report([
+            statement(start=(1, 1), end=(5, 8)),
+            statement(start=(6, 11), end=(12, 31)),
+        ])
+        account = report.accounts[0]
+        self.assertEqual([(date(2024, 5, 9), date(2024, 6, 10))], account.gaps)
+        self.assertEqual(33, report.undeclared_gap_days)
+        self.assertFalse(report.complete)
+
+    def test_no_discovered_statements_is_not_success(self):
+        """Empty discovery must never look like complete coverage."""
+        report = self.report([])
+        self.assertFalse(report.complete)
+
+    def test_december_is_covered_by_next_january_statement(self):
+        """Cycles cross calendar years; this must not be a false gap."""
+        report = self.report(
+            [statement(start=(1, 1), end=(12, 8))],
+            adjacent=[statement(start=(12, 9), end=(12, 31))])
+        self.assertEqual([], report.accounts[0].gaps)
+        self.assertTrue(report.complete)
+        # Adjacent statements provide evidence but are not counted as this
+        # year's statements.
+        self.assertEqual(1, report.accounts[0].statements)
+
+    def test_known_missing_history_is_disclosed_not_hidden(self):
+        known = [{"year": 2024, "institution": "Capital One", "account": "unknown",
+                  "period": "unknown", "reason": "owner cannot access account"}]
+        report = self.report([statement(start=(1, 1), end=(12, 31))], known)
+        self.assertEqual(1, len(report.known_gaps))
+        # Declared missing history means the year is still not complete.
+        self.assertFalse(report.complete)
+
+    def test_derived_period_source_is_unmeasurable_not_a_gap(self):
+        """Venmo exports print no period: inventing gaps from row dates would
+        misreport 'no rows that week' as 'records missing that week'."""
+        rows = parse_venmo().transactions
+        venmo = statement(account="Venmo", institution="Venmo", start=(2, 3),
+                          end=(2, 4), period_source="derived", rows=rows)
+        report = self.report([venmo])
+        entry = report.accounts[0]
+        self.assertTrue(entry.period_unmeasurable)
+        self.assertEqual([], entry.gaps)
+        self.assertEqual(0, report.undeclared_gap_days)
+        self.assertFalse(report.complete)   # unmeasurable is not proven-complete
